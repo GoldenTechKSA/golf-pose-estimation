@@ -25,7 +25,7 @@ This project implements RTMPose (Real-Time Multi-Person Pose Estimation) for gol
 ```
 golf_pose_rtm/
 ├── data/
-│   └── coco/              # COCO 2017 dataset (download with script)
+│   └── coco/              # COCO 2017 dataset
 ├── models/
 │   ├── __init__.py
 │   └── rtmpose.py         # RTMPose model (ResNet50 + SimCC head)

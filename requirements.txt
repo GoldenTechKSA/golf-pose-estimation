@@ -1,4 +1,4 @@
-# RTMPose Golf Swing Analysis - Requirements
+# Golf Swing Analysis - Requirements
 
 # Core dependencies
 torch>=2.0.0
@@ -7,6 +7,8 @@ numpy>=1.22.0,<2.0.0  # Compatible with streamlit, numba, pywavelets
 opencv-python>=4.8.0
 matplotlib>=3.7.0
 protobuf>=3.20,<5  # Compatible with streamlit
+mediapipe>=0.10.0
+pandas>=2.0.0
 
 # Optional but recommended
 tqdm>=4.65.0

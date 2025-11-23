@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Simple Golf Swing Analyzer using MediaPipe Pose
-Alternative to RTMPose - No weights download needed!
-MediaPipe comes with built-in pretrained models.
+Golf Swing Analyzer using MediaPipe Pose
+Features phase detection, biomechanics analysis, and coaching feedback.
 """
 import argparse
 import cv2
@@ -18,6 +17,9 @@ except ImportError:
     subprocess.check_call(['pip', 'install', 'mediapipe'])
     import mediapipe as mp
 
+from swing_phase_detector import SwingPhaseDetector
+from golf_swing_analyzer import GolfSwingAnalyzer
+
 
 class MediaPipeGolfAnalyzer:
     """Golf swing analyzer using MediaPipe Pose"""
@@ -31,6 +33,9 @@ class MediaPipeGolfAnalyzer:
             min_detection_confidence=0.5,
             min_tracking_confidence=0.5
         )
+        # Phase detection and analysis
+        self.phase_detector = SwingPhaseDetector()
+        self.swing_analyzer = GolfSwingAnalyzer()
 
     def calculate_angle(self, a, b, c):
         """Calculate angle between three points"""
@@ -126,8 +131,10 @@ class MediaPipeGolfAnalyzer:
             # Process with MediaPipe
             results = self.pose.process(frame_rgb)
 
-            # Draw skeleton
+            # Draw skeleton and analyze
             if results.pose_landmarks:
+                landmarks = results.pose_landmarks.landmark
+
                 # Draw landmarks
                 self.mp_drawing.draw_landmarks(
                     frame,
@@ -137,17 +144,64 @@ class MediaPipeGolfAnalyzer:
                     self.mp_drawing.DrawingSpec(color=(0, 0, 255), thickness=2)
                 )
 
-                # Calculate and overlay metrics
-                if show_metrics:
-                    metrics = self.analyze_pose(results.pose_landmarks.landmark)
+                # Calculate metrics
+                metrics = self.analyze_pose(landmarks)
 
-                    y_pos = 30
+                if show_metrics and metrics:
+                    # Extract wrist positions for phase detection
+                    left_wrist = (
+                        landmarks[self.mp_pose.PoseLandmark.LEFT_WRIST.value].x * width,
+                        landmarks[self.mp_pose.PoseLandmark.LEFT_WRIST.value].y * height
+                    )
+                    right_wrist = (
+                        landmarks[self.mp_pose.PoseLandmark.RIGHT_WRIST.value].x * width,
+                        landmarks[self.mp_pose.PoseLandmark.RIGHT_WRIST.value].y * height
+                    )
+
+                    # Detect current phase
+                    current_phase = self.phase_detector.update(left_wrist, right_wrist, frame_idx)
+
+                    # Get phase-specific feedback
+                    feedback = self.swing_analyzer.analyze_phase(current_phase, metrics)
+
+                    # Store frame data for export
+                    self.swing_analyzer.add_frame_data(frame_idx, current_phase, metrics)
+
+                    # Draw phase label at top center
+                    phase_text = f"Phase: {current_phase}"
+                    text_size = cv2.getTextSize(phase_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 2)[0]
+                    text_x = (width - text_size[0]) // 2
+                    cv2.putText(frame, phase_text, (text_x, 40),
+                               cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 0), 2)
+
+                    # Draw metrics on left side
+                    y_pos = 80
                     for key, value in metrics.items():
                         if value is not None:
-                            text = f"{key.replace('_', ' ').title()}: {value:.1f}°"
+                            text = f"{key.replace('_', ' ').title()}: {value:.1f}"
                             cv2.putText(frame, text, (10, y_pos),
-                                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-                            y_pos += 25
+                                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+                            y_pos += 20
+
+                    # Draw feedback on right side
+                    feedback_x = width - 350
+                    feedback_y = 80
+                    cv2.putText(frame, "Feedback:", (feedback_x, feedback_y),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+                    feedback_y += 25
+
+                    for fb in feedback[:3]:  # Limit to top 3 most important tips
+                        # Color code: green for positive, orange for warnings
+                        if fb.startswith("Good") or fb.startswith("Great") or fb.startswith("Excellent") or fb.startswith("Full"):
+                            color = (0, 255, 0)  # Green
+                            fb_text = f"+ {fb}"
+                        else:
+                            color = (0, 165, 255)  # Orange
+                            fb_text = f"! {fb}"
+
+                        cv2.putText(frame, fb_text, (feedback_x, feedback_y),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
+                        feedback_y += 18
 
             # Write frame
             out.write(frame)
@@ -162,8 +216,16 @@ class MediaPipeGolfAnalyzer:
         out.release()
         self.pose.close()
 
-        print(f"\n✓ Processing complete!")
-        print(f"  Output saved to: {output_path}")
+        # Export analysis data
+        csv_path = str(Path(output_path).parent / "swing_analysis.csv")
+        self.swing_analyzer.export_swing_data(csv_path)
+
+        # Print summary
+        self.swing_analyzer.print_summary()
+
+        print(f"\nProcessing complete!")
+        print(f"  Video saved to: {output_path}")
+        print(f"  Analysis data: {csv_path}")
 
 
 def main():
