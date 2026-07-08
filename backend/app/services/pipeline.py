@@ -3,7 +3,8 @@
 This is the composition root for a processing job: it wires storage, the
 pose backend, and progress reporting together and walks one swing through
 
-    normalize video -> extract keypoints -> render annotated video
+    normalize video -> extract keypoints -> detect phases + compute metrics
+    -> render annotated video -> generate coaching feedback
 
 reporting progress as it goes. It runs identically inside a Celery worker
 (production) or a background thread of the API process (inline dev mode) —
@@ -19,8 +20,11 @@ from sqlalchemy.orm import sessionmaker
 
 from app.config import Settings, get_settings
 from app.core.smoothing import smooth_series
-from app.models.database import ProcessingStage, Swing, create_session_factory
+from app.models.database import ProcessingStage, Swing, SwingAnalysis, create_session_factory
 from app.services import video_processor as vp
+from app.services.coaching import generate_coaching
+from app.services.metric_calculator import compute_metrics
+from app.services.phase_detector import PHASE_COLORS_BGR, detect_phases
 from app.services.pose import PoseEstimator, create_pose_estimator
 from app.services.progress import ProgressReporter
 from app.services.storage import LocalStorage, get_storage
@@ -28,9 +32,11 @@ from app.services.storage import LocalStorage, get_storage
 logger = logging.getLogger(__name__)
 
 # Stage boundaries on the unified progress bar.
-_PREPARE_SPAN = (0.0, 10.0)
-_EXTRACT_SPAN = (10.0, 62.0)
-_RENDER_SPAN = (62.0, 97.0)
+_PREPARE_SPAN = (0.0, 8.0)
+_EXTRACT_SPAN = (8.0, 55.0)
+_ANALYZE_SPAN = (55.0, 62.0)
+_RENDER_SPAN = (62.0, 93.0)
+_COACH_SPAN = (93.0, 99.0)
 
 
 def _span_progress(span: tuple[float, float], fraction: float) -> float:
@@ -60,6 +66,7 @@ class SwingProcessor:
         original = self.storage.original_path(swing_id)
         if original is None:
             raise FileNotFoundError(f"no uploaded video found for swing {swing_id}")
+        handedness = self._swing_field(swing_id, "handedness") or self.settings.default_handedness
 
         # 1. Normalize the upload and capture a poster frame.
         reporter.update(ProcessingStage.PREPARING, _span_progress(_PREPARE_SPAN, 0.1),
@@ -83,13 +90,48 @@ class SwingProcessor:
         self.storage.save_json(swing_id, "keypoints", raw.to_json_payload())
         self._update_swing(swing_id, pose_model=estimator.model_name)
 
-        # 3. Clean the tracks and render the annotated video.
+        # 3. Clean the tracks, segment the swing, and compute biomechanics.
         smoothed = smooth_series(raw, conf_threshold=self.settings.pose_conf_threshold)
+        reporter.update(ProcessingStage.ANALYZING, _span_progress(_ANALYZE_SPAN, 0.2),
+                        "detecting swing phases")
+        phases = detect_phases(smoothed)
+        reporter.update(ProcessingStage.ANALYZING, _span_progress(_ANALYZE_SPAN, 0.6),
+                        "computing biomechanical metrics")
+        metrics = compute_metrics(smoothed, phases, handedness)
+        if phases.warnings:
+            metrics["warnings"] = phases.warnings
+        self._save_analysis(swing_id, phases=phases.segments, metrics=metrics)
+
+        # 4. Render the annotated video, phase-colored.
         vp.render_annotated(
             source, self.storage.artifact_path(swing_id, "annotated"), smoothed,
+            frame_labels=phases.frame_labels,
+            label_colors=PHASE_COLORS_BGR,
             on_progress=lambda f, m: reporter.update(
                 ProcessingStage.RENDERING, _span_progress(_RENDER_SPAN, f), m),
         )
+
+        # 5. AI coaching feedback (best-effort — never fails the job).
+        reporter.update(ProcessingStage.COACHING, _span_progress(_COACH_SPAN, 0.2),
+                        "generating coaching feedback")
+        coaching = generate_coaching(metrics, phases.segments, handedness, self.settings)
+        if coaching is not None:
+            self._save_analysis(swing_id, coaching=coaching)
+
+    def _swing_field(self, swing_id: str, field: str):
+        with self.session_factory() as session:
+            swing = session.get(Swing, swing_id)
+            return getattr(swing, field, None) if swing else None
+
+    def _save_analysis(self, swing_id: str, **fields) -> None:
+        with self.session_factory() as session:
+            analysis = session.get(SwingAnalysis, swing_id)
+            if analysis is None:
+                analysis = SwingAnalysis(swing_id=swing_id)
+                session.add(analysis)
+            for key, value in fields.items():
+                setattr(analysis, key, value)
+            session.commit()
 
     def _update_swing(self, swing_id: str, **fields) -> None:
         with self.session_factory() as session:
