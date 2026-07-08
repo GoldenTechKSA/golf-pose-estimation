@@ -1,7 +1,7 @@
 """Pydantic request/response models — the API contract with the frontend."""
-from datetime import datetime
+from datetime import datetime, timezone
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.database import ProcessingStage, Swing, SwingStatus
 
@@ -51,6 +51,13 @@ class SwingSummary(BaseModel):
     duration: float | None = None
     fps: float | None = None
     pose_model: str | None = None
+
+    @field_validator("created_at")
+    @classmethod
+    def _ensure_utc(cls, value: datetime) -> datetime:
+        # SQLite loses tzinfo; without it the browser would parse the ISO
+        # string as local time. Timestamps are always written as UTC.
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
 class SwingDetail(SwingSummary):

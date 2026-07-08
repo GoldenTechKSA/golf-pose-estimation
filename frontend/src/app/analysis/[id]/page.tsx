@@ -96,7 +96,7 @@ export default function AnalysisPage() {
         <div className="flex flex-wrap gap-2">
           <Badge>{swing.handedness}-handed</Badge>
           <Badge>{formatDuration(swing.duration)}</Badge>
-          {swing.fps && <Badge>{Math.round(swing.fps)} fps</Badge>}
+          {swing.fps ? <Badge>{Math.round(swing.fps)} fps</Badge> : null}
           {swing.pose_model && <Badge>{swing.pose_model.replace(".pt", "")}</Badge>}
         </div>
       </header>
