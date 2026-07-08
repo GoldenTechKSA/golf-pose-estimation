@@ -101,21 +101,23 @@ export default function AnalysisPage() {
         </div>
       </header>
 
-      <VideoPlayer swing={swing} phases={swing.phases} />
-
       {metrics?.warnings?.map((warning) => (
         <p key={warning} className="text-sm text-watch">
           {warning}
         </p>
       ))}
 
-      {metrics && (
-        <>
+      {/* Video and the key metrics share a row on large screens so both are
+          visible without scrolling; they stack on narrow viewports. */}
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+        <VideoPlayer swing={swing} phases={swing.phases} />
+
+        {metrics && (
           <section aria-labelledby="metrics-heading">
             <h2 id="metrics-heading" className="mb-3 text-lg font-semibold">
               Key metrics
             </h2>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3">
               {metrics.summary
                 .filter((entry) => entry.value != null)
                 .map((entry) => (
@@ -123,7 +125,11 @@ export default function AnalysisPage() {
                 ))}
             </div>
           </section>
+        )}
+      </div>
 
+      {metrics && (
+        <>
           <Card>
             <CardHeader>
               <CardTitle>Angles through the swing</CardTitle>

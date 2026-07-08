@@ -113,7 +113,7 @@ export function VideoPlayer({
         controls
         playsInline
         preload="metadata"
-        className="w-full rounded-xl border border-border bg-black"
+        className="mx-auto max-h-[60vh] w-auto max-w-full rounded-xl border border-border bg-black"
         onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
         onLoadedMetadata={(e) => {
           e.currentTarget.playbackRate = speed;
