@@ -52,8 +52,8 @@ class Settings(BaseSettings):
 
     # --- AI coaching ---
     anthropic_api_key: str = ""
-    coaching_model: str = "claude-sonnet-4-5"
-    coaching_max_tokens: int = 1500
+    coaching_model: str = "claude-sonnet-5"
+    coaching_max_tokens: int = 2000
 
 
 @lru_cache
