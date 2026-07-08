@@ -50,25 +50,9 @@ export function Dropzone({
   };
 
   return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => inputRef.current?.click()}
-      onDragOver={(e) => {
-        e.preventDefault();
-        setDragging(true);
-      }}
-      onDragLeave={() => setDragging(false)}
-      onDrop={onDrop}
-      aria-label="Choose or drop a swing video"
-      className={cn(
-        "flex w-full cursor-pointer flex-col items-center gap-3 rounded-xl border-2 border-dashed p-10 text-center transition-colors",
-        dragging
-          ? "border-accent bg-accent/5"
-          : "border-border bg-surface hover:border-muted",
-        disabled && "pointer-events-none opacity-60",
-      )}
-    >
+    <>
+      {/* Kept outside the button — interactive content inside <button> is
+          invalid HTML even when hidden. */}
       <input
         ref={inputRef}
         type="file"
@@ -76,6 +60,25 @@ export function Dropzone({
         className="hidden"
         onChange={(e) => handleFiles(e.target.files)}
       />
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => inputRef.current?.click()}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={onDrop}
+        aria-label="Choose or drop a swing video"
+        className={cn(
+          "flex w-full cursor-pointer flex-col items-center gap-3 rounded-xl border-2 border-dashed p-10 text-center transition-colors",
+          dragging
+            ? "border-accent bg-accent/5"
+            : "border-border bg-surface hover:border-muted",
+          disabled && "pointer-events-none opacity-60",
+        )}
+      >
       {file ? (
         <>
           <FileVideo className="h-8 w-8 text-accent" aria-hidden />
@@ -99,6 +102,7 @@ export function Dropzone({
           </div>
         </>
       )}
-    </button>
+      </button>
+    </>
   );
 }

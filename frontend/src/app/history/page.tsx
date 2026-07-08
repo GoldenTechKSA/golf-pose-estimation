@@ -92,7 +92,9 @@ export default function HistoryPage() {
               href={`/analysis/${swing.id}`}
               className="relative h-18 w-28 shrink-0 overflow-hidden rounded-lg bg-surface-2"
             >
-              {swing.status === "completed" || swing.status === "processing" ? (
+              {swing.status === "completed" ||
+              (swing.status === "processing" &&
+                !["queued", "preparing"].includes(swing.stage)) ? (
                 // Thumbnails stream from the API service, not a Next-optimizable
                 // static source — plain img semantics via unoptimized.
                 <Image

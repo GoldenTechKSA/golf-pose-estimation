@@ -1,8 +1,10 @@
 # SwingLens web frontend — multi-stage build to a minimal standalone runtime.
 FROM node:22-alpine AS deps
 WORKDIR /app
-COPY package.json ./
-RUN npm install
+# package-lock.json is optional here so the image builds before a lockfile
+# exists; once one is committed, `npm ci` makes builds fully reproducible.
+COPY package.json package-lock.json* ./
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 FROM node:22-alpine AS build
 WORKDIR /app
@@ -15,7 +17,7 @@ RUN npm run build
 
 FROM node:22-alpine AS runtime
 WORKDIR /app
-ENV NODE_ENV=production
+ENV NODE_ENV=production HOSTNAME=0.0.0.0 PORT=3000
 RUN addgroup -S swinglens && adduser -S swinglens -G swinglens
 COPY --from=build --chown=swinglens:swinglens /app/.next/standalone ./
 COPY --from=build --chown=swinglens:swinglens /app/.next/static ./.next/static
