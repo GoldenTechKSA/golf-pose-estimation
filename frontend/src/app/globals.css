@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Design tokens. Chart & phase colors come from a validated categorical
+ * palette (adjacent-pair CVD separation checked in both modes); identity is
+ * never carried by color alone — phase chips and chart series always carry
+ * text labels.
+ */
+:root {
+  --background: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-2: #f0efec;
+  --foreground: #0b0b0b;
+  --secondary: #52514e;
+  --muted: #898781;
+  --border: #e1e0d9;
+  --hairline: rgba(11, 11, 11, 0.1);
+  --accent: #2a78d6;
+  --accent-strong: #1c5cab;
+  --good: #0ca30c;
+  --good-text: #006300;
+  --watch: #b25e00;
+
+  --phase-address: #898781;
+  --phase-backswing: #2a78d6;
+  --phase-top: #eda100;
+  --phase-downswing: #4a3aa7;
+  --phase-impact: #e34948;
+  --phase-follow_through: #e87ba4;
+  --phase-finish: #1baf7a;
+
+  --series-1: #2a78d6;
+  --series-2: #1baf7a;
+  --series-3: #4a3aa7;
+}
+
+.dark {
+  --background: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #262624;
+  --foreground: #ffffff;
+  --secondary: #c3c2b7;
+  --muted: #898781;
+  --border: #2c2c2a;
+  --hairline: rgba(255, 255, 255, 0.1);
+  --accent: #3987e5;
+  --accent-strong: #6da7ec;
+  --good: #0ca30c;
+  --good-text: #0ca30c;
+  --watch: #fab219;
+
+  --phase-address: #898781;
+  --phase-backswing: #3987e5;
+  --phase-top: #c98500;
+  --phase-downswing: #9085e9;
+  --phase-impact: #e66767;
+  --phase-follow_through: #d55181;
+  --phase-finish: #199e70;
+
+  --series-1: #3987e5;
+  --series-2: #199e70;
+  --series-3: #9085e9;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-foreground: var(--foreground);
+  --color-secondary: var(--secondary);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-good: var(--good);
+  --color-good-text: var(--good-text);
+  --color-watch: var(--watch);
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+html {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--accent) 25%, transparent);
+}
