@@ -18,13 +18,15 @@ logger = logging.getLogger(__name__)
 
 
 class YoloPoseEstimator(PoseEstimator):
-    def __init__(self, model_name: str, device: str = "", conf_threshold: float = 0.25):
+    def __init__(self, model_name: str, device: str = "", conf_threshold: float = 0.25,
+                 imgsz: int = 640):
         from ultralytics import YOLO  # lazy: pulls in torch
 
         self.model = YOLO(model_name)
         self.model_name = model_name
         self.device = device
         self.conf_threshold = conf_threshold
+        self.imgsz = imgsz
         self._last_center: np.ndarray | None = None
 
     def reset(self) -> None:
@@ -35,6 +37,7 @@ class YoloPoseEstimator(PoseEstimator):
             frame_bgr,
             verbose=False,
             conf=self.conf_threshold,
+            imgsz=self.imgsz,
             **({"device": self.device} if self.device else {}),
         )
         result = results[0]

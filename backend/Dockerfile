@@ -9,9 +9,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+# Dependency layer: install third-party deps (torch, ultralytics, ...) against
+# a stub package so this slow step is cached and only re-runs when
+# pyproject.toml changes — not on every app code edit.
 COPY pyproject.toml ./
+RUN mkdir -p app && touch app/__init__.py \
+    && pip install --no-cache-dir . \
+    && rm -rf app
+
+# App layer: copy the real code and reinstall just this package, leaving the
+# cached dependency layer untouched (seconds instead of minutes to rebuild).
 COPY app ./app
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir --no-deps --force-reinstall .
 
 # Non-root runtime user; /data holds uploads, outputs, and model weights.
 RUN useradd --create-home swinglens \
