@@ -25,6 +25,7 @@ def create_pose_estimator(settings: Settings) -> PoseEstimator:
                 model_name=name,
                 device=settings.pose_device,
                 conf_threshold=settings.pose_conf_threshold,
+                imgsz=settings.pose_imgsz,
             )
             if name != settings.pose_model:
                 logger.warning("pose model %r unavailable, using fallback %r", settings.pose_model, name)

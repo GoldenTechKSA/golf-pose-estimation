@@ -15,7 +15,8 @@ class Settings(BaseSettings):
 
     # --- Service ---
     api_v1_prefix: str = "/api/v1"
-    cors_origins: list[str] = ["http://localhost:3000"]
+    # 3000 = dockerized web app; 3001 = local `npm run dev` against this API.
+    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:3001"]
 
     # --- Persistence ---
     database_url: str = "sqlite:///./data/swinglens.db"
@@ -37,10 +38,21 @@ class Settings(BaseSettings):
     # The pose model is swappable: any Ultralytics *-pose checkpoint name works
     # here, and the fallbacks are tried in order if the primary fails to load
     # (e.g. yolo26 weights not yet published for the installed ultralytics).
+    #
+    # Default is the medium model — best accuracy, and the right choice on a
+    # GPU box. On CPU-only deployments (e.g. Docker on Apple Silicon, which
+    # has no GPU passthrough) it is far too slow for interactive use, so the
+    # docker-compose environment overrides POSE_MODEL to a nano variant. See
+    # .env.example for the speed/accuracy tradeoff.
     pose_model: str = "yolo26m-pose.pt"
     pose_model_fallbacks: list[str] = ["yolo11m-pose.pt", "yolov8m-pose.pt"]
     pose_device: str = ""  # "" lets ultralytics pick (cuda/mps/cpu)
     pose_conf_threshold: float = 0.25
+    # Inference resolution (long side) the model runs at. Pose keypoints are
+    # scaled back to the source resolution regardless, so this trades
+    # localization precision for speed — 640 is the model default, 512 is
+    # noticeably faster on CPU with a small accuracy cost.
+    pose_imgsz: int = 640
     # Long side of frames fed to the model; larger inputs are downscaled for
     # inference speed (annotation is still rendered at the processing size).
     max_processing_dim: int = 1280

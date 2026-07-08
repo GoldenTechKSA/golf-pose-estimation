@@ -32,10 +32,12 @@ services:
       REDIS_URL: redis://redis:6379/0
       STORAGE_DIR: /data/storage
       PROCESSING_MODE: celery
-      POSE_MODEL: ${POSE_MODEL:-yolo26m-pose.pt}
+      # CPU-only by default (see .env.example) — nano keeps analysis interactive.
+      POSE_MODEL: ${POSE_MODEL:-yolo11n-pose.pt}
+      POSE_IMGSZ: ${POSE_IMGSZ:-640}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       COACHING_MODEL: ${COACHING_MODEL:-claude-sonnet-5}
-      CORS_ORIGINS: '["http://localhost:3000"]'
+      CORS_ORIGINS: '["http://localhost:3000", "http://localhost:3001"]'
     volumes:
       - storage:/data/storage
       - models:/data/models
