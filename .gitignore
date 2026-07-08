@@ -48,5 +48,9 @@ weights/
 *.log
 logs/
 
-# --- Legacy class project keeps its own outputs ---
+# --- Legacy class project keeps its own sample videos and outputs ---
 !legacy/outputs/*.csv
+!legacy/outputs/*.mp4
+!legacy/outputs/*.MOV
+!legacy/sample-videos/*.mp4
+!legacy/sample-videos/*.MOV

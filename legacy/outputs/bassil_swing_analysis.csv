@@ -1,0 +1,2 @@
+phase,frames,right_arm_angle,left_arm_angle,right_knee_angle,left_knee_angle,shoulder_rotation,hip_rotation,right_arm_angle_dev,left_arm_angle_dev,right_knee_angle_dev,left_knee_angle_dev,shoulder_rotation_dev,hip_rotation_dev
+Address,151,129.4,101.8,173.0,173.6,-57.0,-42.2,-25.2,-59.6,39.0,30.3,-74.3,-49.3

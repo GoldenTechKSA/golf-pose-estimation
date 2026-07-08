@@ -1,0 +1,6 @@
+phase,frames,right_arm_angle,left_arm_angle,right_knee_angle,left_knee_angle,shoulder_rotation,hip_rotation,right_arm_angle_dev,left_arm_angle_dev,right_knee_angle_dev,left_knee_angle_dev,shoulder_rotation_dev,hip_rotation_dev
+Address,30,146.8,159.8,162.3,156.7,33.7,-16.3,-7.8,-1.6,28.3,13.4,16.4,-23.4
+Backswing,43,98.6,117.5,153.9,139.2,27.6,7.1,11.2,-34.6,7.5,16.0,6.1,-0.8
+Top,1,165.9,114.9,168.6,173.1,2.5,-0.5,83.6,-21.9,23.2,52.1,-13.6,-6.8
+Downswing,34,132.1,93.4,172.5,177.5,2.0,-0.8,38.0,-36.4,43.4,45.7,-13.2,-5.5
+Follow-through,89,119.6,108.4,160.3,168.9,2.4,-3.4,2.0,39.0,6.8,0.4,-15.2,-7.9
