@@ -81,11 +81,6 @@ def _round_series(values: np.ndarray, ndigits: int = 1) -> list:
     return out
 
 
-def _nan_at(series: np.ndarray, idx: int) -> float:
-    value = float(series[idx])
-    return value
-
-
 # ---------------------------------------------------------------------------
 # Per-frame series
 # ---------------------------------------------------------------------------
