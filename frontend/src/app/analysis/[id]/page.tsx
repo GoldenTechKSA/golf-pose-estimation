@@ -4,7 +4,7 @@ import { useParams } from "next/navigation";
 import { useEffect } from "react";
 
 import { CoachingPanel } from "@/components/analysis/coaching-panel";
-import { MetricCard } from "@/components/analysis/metric-card";
+import { KeyMetrics } from "@/components/analysis/key-metrics";
 import { ProcessingView } from "@/components/analysis/processing-view";
 import { SwingDetail } from "@/components/analysis/swing-detail";
 import { SwingSummary } from "@/components/analysis/swing-summary";
@@ -112,22 +112,7 @@ export default function AnalysisPage() {
       <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
         <VideoPlayer swing={swing} phases={swing.phases} />
 
-        {metrics && (
-          <section aria-labelledby="metrics-heading">
-            <h2 id="metrics-heading" className="mb-3 text-lg font-semibold">
-              Key metrics
-            </h2>
-            <div className="grid grid-cols-2 gap-3">
-              {metrics.summary
-                .filter((entry) => entry.value != null)
-                // Tempo is the hero's headline number; a tile would say it twice.
-                .filter((entry) => entry.key !== "tempo_ratio")
-                .map((entry) => (
-                  <MetricCard key={entry.key} metric={entry} />
-                ))}
-            </div>
-          </section>
-        )}
+        {metrics && <KeyMetrics metrics={metrics} />}
       </div>
 
       {metrics && <SwingDetail metrics={metrics} phases={swing.phases} />}

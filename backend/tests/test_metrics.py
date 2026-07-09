@@ -4,8 +4,12 @@ import numpy as np
 import pytest
 
 from app.services.metric_calculator import (
+    FRONTALITY_FACE_ON,
     MIN_LINE_RATIO,
+    ROTATION_METRIC_KEYS,
+    _apply_camera_reliability,
     _compute_delta,
+    classify_view,
     compute_metrics,
     joint_angle_deg,
     line_angle_deg,
@@ -112,6 +116,63 @@ class TestSwingMetrics:
     def test_includes_2d_limitation_notes(self, analysis):
         metrics, _ = analysis
         assert any("2D" in note for note in metrics["notes"])
+
+
+class TestCameraView:
+    def test_classify_boundaries(self):
+        assert classify_view(0.60) == "face_on"
+        assert classify_view(FRONTALITY_FACE_ON) == "face_on"
+        assert classify_view(0.35) == "oblique"
+        assert classify_view(0.10) == "down_the_line"
+        assert classify_view(None) == "unknown"
+
+    def test_synthetic_swing_is_recognised_as_face_on(self, analysis):
+        """The synthetic swing is constructed face-on; if this ever flips, the
+        thresholds have drifted away from the only ground truth we have."""
+        metrics, _ = analysis
+        assert metrics["camera"]["view"] == "face_on"
+        assert metrics["camera"]["rotation_measurable"] is True
+
+    def test_face_on_keeps_rotation_metrics_judged(self, analysis):
+        metrics, _ = analysis
+        rot = [e for e in metrics["summary"] if e["key"] in ROTATION_METRIC_KEYS]
+        assert rot
+        assert all(e["reliable"] for e in rot)
+
+    def test_down_the_line_strips_the_verdict_but_keeps_the_number(self):
+        summary = [
+            {"key": "shoulder_turn_at_top", "value": 12.1, "assessment": "watch",
+             "delta": -47.9, "delta_normalized": 0.8, "reliable": True,
+             "unreliable_reason": None},
+            {"key": "early_extension", "value": 5.5, "assessment": "good",
+             "delta": 0.0, "delta_normalized": 0.0, "reliable": True,
+             "unreliable_reason": None},
+        ]
+        out = _apply_camera_reliability(summary, "down_the_line")
+        rot, posture = out[0], out[1]
+
+        assert rot["value"] == 12.1          # the projection really does show this
+        assert rot["reliable"] is False
+        assert rot["assessment"] is None     # but it is not a verdict
+        assert rot["delta"] is None
+        assert "camera axis" in rot["unreliable_reason"]
+
+        assert posture["reliable"] is True   # posture survives every view
+        assert posture["assessment"] == "good"
+
+    def test_oblique_also_downgrades_rotation(self):
+        summary = [{"key": "x_factor_at_top", "value": 20.0, "assessment": "watch",
+                    "delta": -5.0, "delta_normalized": 0.1, "reliable": True,
+                    "unreliable_reason": None}]
+        out = _apply_camera_reliability(summary, "oblique")
+        assert out[0]["reliable"] is False
+        assert "oblique" in out[0]["unreliable_reason"]
+
+    def test_frontality_is_measured_at_address_not_across_the_swing(self, analysis):
+        """Across the whole swing a down-the-line golfer's shoulders open up and
+        the ratio converges on the face-on value. Address is where they differ."""
+        metrics, _ = analysis
+        assert metrics["camera"]["frontality"] is not None
 
 
 class TestDelta:

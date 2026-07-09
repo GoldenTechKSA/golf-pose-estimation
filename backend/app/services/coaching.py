@@ -82,8 +82,12 @@ SYSTEM_PROMPT = (
     "are attached automatically. Say what the number means, not what it is.\n\n"
     "Rank improvements by `delta_normalized` (how far outside its ideal range a "
     "metric sits, in range-widths) rather than by the raw delta, so a small miss "
-    "on a narrow range outranks a large miss on a wide one. Metrics whose value "
-    "is null were not measurable from this camera angle — never comment on them."
+    "on a narrow range outranks a large miss on a wide one.\n\n"
+    "You are shown only the metrics this camera angle can actually measure. "
+    "`camera_view` tells you what you are looking at. From a down-the-line view "
+    "shoulder and hip rotation are absent from the list on purpose — they cannot "
+    "be recovered from this footage, so do not speculate about turn, coil, or "
+    "X-Factor. Coach what you can see."
 )
 
 
@@ -93,12 +97,23 @@ _PROMPT_FIELDS = (
 )
 
 
+def usable_metrics(metrics: dict) -> list[dict]:
+    """Entries the model is allowed to reason about: measured, and trustworthy.
+
+    A metric the camera could not see is worse than a missing one — it looks
+    like evidence. Ranking by delta_normalized would otherwise put the largest
+    projection artifact at the top of the coaching report.
+    """
+    return [
+        entry for entry in metrics.get("summary", [])
+        if entry.get("value") is not None and entry.get("reliable", True)
+    ]
+
+
 def build_coaching_prompt(metrics: dict, phases: list[dict], handedness: str) -> str:
     """Assemble the user prompt from the analysis payload (pure, testable)."""
     summary = [
-        {k: entry[k] for k in _PROMPT_FIELDS}
-        for entry in metrics.get("summary", [])
-        if entry.get("value") is not None
+        {k: entry[k] for k in _PROMPT_FIELDS} for entry in usable_metrics(metrics)
     ]
     # Only offer drills for metrics this swing actually measured, so the model
     # cannot pick a drill for a metric it is not allowed to talk about.
@@ -109,8 +124,10 @@ def build_coaching_prompt(metrics: dict, phases: list[dict], handedness: str) ->
         for entry in summary
         if drills_for(entry["key"])
     }
+    camera = metrics.get("camera") or {}
     payload = {
         "handedness": handedness,
+        "camera_view": camera.get("view", "unknown"),
         "phases": [
             {"name": p["name"], "duration_s": round(p["end_time"] - p["start_time"], 2)}
             for p in phases
@@ -138,7 +155,7 @@ def build_report(report: CoachingReport, metrics: dict) -> dict:
     it chose a metric and some drill ids, and everything else (values, ranges,
     deltas, drill text) comes from data we computed.
     """
-    by_key = {e["key"]: e for e in metrics.get("summary", []) if e.get("value") is not None}
+    by_key = {e["key"]: e for e in usable_metrics(metrics)}
 
     improvements = []
     for item in report.improvements:

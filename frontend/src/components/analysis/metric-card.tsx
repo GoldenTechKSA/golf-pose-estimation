@@ -11,13 +11,20 @@ import type { MetricEntry } from "@/lib/types";
  */
 export function MetricCard({ metric }: { metric: MetricEntry }) {
   const { label, value, unit, ideal_range, assessment, delta, description } = metric;
+  // Without a verdict, an ideal range is just an invitation to draw one anyway.
+  const unmeasurable = metric.reliable === false;
   return (
     // The tile grid is for scanning numbers and status. The explanatory sentence
     // stays reachable on hover rather than competing with the value on every tile.
-    <Card title={description}>
+    <Card title={unmeasurable ? metric.unreliable_reason ?? description : description}>
       <CardContent padding="compact" className="flex h-full flex-col gap-1.5">
         <p className="text-xs font-medium text-secondary">{label}</p>
-        <p className="tabular font-display text-2xl font-semibold tracking-tight">
+        <p
+          className={cn(
+            "tabular font-display text-2xl font-semibold tracking-tight",
+            unmeasurable && "text-muted",
+          )}
+        >
           {value == null ? "—" : value}
           {value != null && unit && (
             <span
@@ -41,7 +48,10 @@ export function MetricCard({ metric }: { metric: MetricEntry }) {
               <TriangleAlert className="h-3.5 w-3.5" aria-hidden /> Worth a look
             </span>
           )}
-          {ideal_range && (
+          {unmeasurable && (
+            <span className="text-muted">not measurable from this angle</span>
+          )}
+          {!unmeasurable && ideal_range && (
             <span className="tabular text-muted">
               typical {formatRange(ideal_range, unit)}
             </span>

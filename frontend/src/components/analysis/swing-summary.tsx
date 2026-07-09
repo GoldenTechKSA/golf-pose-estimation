@@ -17,7 +17,11 @@ export function SwingSummary({
   metrics: SwingMetrics;
   coaching: CoachingReport | null;
 }) {
-  const scored = metrics.summary.filter((m) => m.assessment !== null);
+  // Metrics the camera could not measure carry no assessment, so they cannot
+  // inflate the count of things to work on.
+  const scored = metrics.summary.filter(
+    (m) => m.assessment !== null && m.reliable !== false,
+  );
   const watch = scored.filter((m) => m.assessment === "watch");
   const tempo = metrics.summary.find((m) => m.key === "tempo_ratio");
   const topFault = coaching?.improvements[0] ?? null;

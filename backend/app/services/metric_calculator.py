@@ -72,6 +72,61 @@ def line_angle_masked(p_a: np.ndarray, p_b: np.ndarray,
     return np.where(ratio < MIN_LINE_RATIO, np.nan, angle)
 
 
+# ---------------------------------------------------------------------------
+# Camera view
+# ---------------------------------------------------------------------------
+
+# Metrics that measure rotation about the body's vertical axis. Their 2D proxy
+# is the projected angle of the shoulder or hip line, which only carries
+# information when the camera can actually see that line's width.
+ROTATION_METRIC_KEYS = frozenset({
+    "shoulder_turn_at_top",
+    "hip_turn_at_top",
+    "x_factor_at_top",
+    "x_factor_stretch",
+})
+
+# Frontality is the shoulder line's projected width over torso length, measured
+# at address — where the shoulder line is parallel to the target line. A face-on
+# camera looks perpendicular to it and sees full width; a down-the-line camera
+# looks along it and sees almost none.
+#
+# Calibration (two swings, one of them synthetic — treat these as heuristics,
+# not physics): the synthetic face-on swing measures 0.571 at address; the real
+# down-the-line sample measures 0.100. Measured across the *whole* swing the two
+# are nearly identical (0.571 vs 0.525), because a down-the-line golfer's
+# shoulders open toward the camera through the follow-through. Address is the
+# only window where the two views separate.
+FRONTALITY_FACE_ON = 0.45
+FRONTALITY_DOWN_THE_LINE = 0.25
+
+
+def estimate_frontality(series: KeypointSeries, address_end: int) -> float | None:
+    """Median shoulder-width / torso-length over the address phase."""
+    end = max(1, min(address_end + 1, series.n_frames))
+    shoulders = series.xy(KP.LEFT_SHOULDER)[:end] - series.xy(KP.RIGHT_SHOULDER)[:end]
+    torso = (series.midpoint(KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER)[:end]
+             - series.midpoint(KP.LEFT_HIP, KP.RIGHT_HIP)[:end])
+
+    width = np.linalg.norm(shoulders, axis=-1)
+    length = np.linalg.norm(torso, axis=-1)
+    ratio = np.where(length > 1e-6, width / np.where(length > 1e-6, length, 1.0), np.nan)
+    if np.all(np.isnan(ratio)):
+        return None
+    return round(float(np.nanmedian(ratio)), 3)
+
+
+def classify_view(frontality: float | None) -> str:
+    """face_on | oblique | down_the_line | unknown."""
+    if frontality is None:
+        return "unknown"
+    if frontality >= FRONTALITY_FACE_ON:
+        return "face_on"
+    if frontality < FRONTALITY_DOWN_THE_LINE:
+        return "down_the_line"
+    return "oblique"
+
+
 def joint_angle_deg(p_a: np.ndarray, p_b: np.ndarray, p_c: np.ndarray) -> np.ndarray:
     """Interior angle at vertex b for points a-b-c, in degrees [0, 180].
 
@@ -205,8 +260,40 @@ def _entry(key: str, label: str, value: float | None, unit: str,
         "assessment": assessment,
         "delta": delta,
         "delta_normalized": delta_normalized,
+        # Set False by `_apply_camera_reliability` when the camera cannot see
+        # what this metric claims to measure.
+        "reliable": True,
+        "unreliable_reason": None,
         "description": description,
     }
+
+
+def _apply_camera_reliability(summary: list[dict], view: str) -> list[dict]:
+    """Strip the judgement from rotation metrics the camera cannot measure.
+
+    The value stays — it is what the projection actually shows, and hiding it
+    would be its own kind of lie. What goes is everything that reads as a
+    verdict: the good/watch assessment and the delta. A number with no ideal
+    range attached invites no conclusion.
+    """
+    if view == "face_on":
+        return summary
+
+    reason = (
+        "Shoulder and hip rotation project along the camera axis from this "
+        "view, so their 2D angles carry almost no rotation information."
+        if view == "down_the_line" else
+        "The camera is oblique to the target line, so rotation angles are "
+        "compressed and only loosely indicative."
+    )
+    for entry in summary:
+        if entry["key"] in ROTATION_METRIC_KEYS:
+            entry["reliable"] = False
+            entry["unreliable_reason"] = reason
+            entry["assessment"] = None
+            entry["delta"] = None
+            entry["delta_normalized"] = None
+    return summary
 
 
 def _safe(series: np.ndarray, idx: int) -> float | None:
@@ -215,7 +302,8 @@ def _safe(series: np.ndarray, idx: int) -> float | None:
 
 
 def _kinematic_sequence(series: KeypointSeries, signals: dict[str, np.ndarray],
-                        events: dict[str, int], handedness: str) -> dict:
+                        events: dict[str, int], handedness: str,
+                        view: str = "face_on") -> dict:
     """Order in which body segments reach peak rotational speed in the
     downswing. An efficient swing sequences proximal-to-distal:
     hips -> torso -> arms."""
@@ -229,6 +317,13 @@ def _kinematic_sequence(series: KeypointSeries, signals: dict[str, np.ndarray],
     top, impact = events["top"], events["impact"]
     if impact - top < 3:
         return {"available": False, "reason": "downswing too short to sequence"}
+
+    # The sequence is built from the same shoulder and hip line angles the
+    # rotation metrics use. If the camera cannot see rotation, it cannot see the
+    # order rotation happens in either.
+    if view != "face_on":
+        return {"available": False,
+                "reason": "segment rotation not measurable from this camera angle"}
 
     window = slice(top, impact + 1)
     inputs = (("hips", signals["hip_angle"]),
@@ -355,12 +450,23 @@ def compute_metrics(series: KeypointSeries, phases: SwingPhases,
                "Athletic knee flex at setup (180 = fully straight)."),
     ]
 
+    frontality = estimate_frontality(series, address_ref)
+    view = classify_view(frontality)
+    summary = _apply_camera_reliability(summary, view)
+
     return {
+        "camera": {
+            "view": view,
+            "frontality": frontality,
+            # Rotation is the only family this actually gates today; posture,
+            # tempo and joint angles survive every view.
+            "rotation_measurable": view == "face_on",
+        },
         "summary": summary,
         "series": {name: _round_series(values) for name, values in signals.items()
                    if name != "wrist_height"} | {
                    "wrist_height": _round_series(signals["wrist_height"], 3)},
-        "kinematic_sequence": _kinematic_sequence(series, signals, ev, handedness),
+        "kinematic_sequence": _kinematic_sequence(series, signals, ev, handedness, view),
         "events": {k: int(v) for k, v in ev.items()},
         "fps": fps,
         "handedness": handedness,

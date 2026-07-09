@@ -62,7 +62,19 @@ export interface MetricEntry {
   delta: number | null;
   /** |delta| in range-widths, so misses are comparable across metrics. */
   delta_normalized: number | null;
+  /** False when this camera angle cannot measure what the metric claims to. */
+  reliable: boolean;
+  unreliable_reason: string | null;
   description: string;
+}
+
+export type CameraView = "face_on" | "oblique" | "down_the_line" | "unknown";
+
+export interface CameraInfo {
+  view: CameraView;
+  /** Shoulder width over torso length at address. Low means end-on to the camera. */
+  frontality: number | null;
+  rotation_measurable: boolean;
 }
 
 export interface KinematicSequence {
@@ -74,6 +86,8 @@ export interface KinematicSequence {
 }
 
 export interface SwingMetrics {
+  /** Absent on analyses stored before camera-view detection landed. */
+  camera?: CameraInfo;
   summary: MetricEntry[];
   series: Record<string, (number | null)[]>;
   kinematic_sequence: KinematicSequence;

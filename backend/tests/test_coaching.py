@@ -12,6 +12,7 @@ from app.services.coaching import (
     Improvement,
     MetricKey,
     Strength,
+    build_coaching_prompt,
     build_report,
 )
 from app.services.drill_library import DRILLS, drills_for, resolve, valid_ids_for
@@ -78,6 +79,64 @@ class TestDrillLibraryIntegrity:
         """A drill filed under a key the schema forbids can never be selected."""
         allowed = set(MetricKey.__args__)
         assert set(DRILLS) <= allowed, set(DRILLS) - allowed
+
+
+class TestCameraAngleGating:
+    """A metric the camera cannot see is worse than a missing one — it looks
+    like evidence, and delta_normalized would rank the artifact first."""
+
+    def _dtl_metrics(self) -> dict:
+        return {
+            "camera": {"view": "down_the_line", "frontality": 0.1,
+                       "rotation_measurable": False},
+            "summary": [
+                {"key": "shoulder_turn_at_top", "label": "Shoulder turn at top",
+                 "value": 12.1, "unit": "°", "ideal_range": [60.0, 120.0],
+                 "lower_is_better": False, "assessment": None,
+                 "delta": None, "delta_normalized": None,
+                 "reliable": False, "unreliable_reason": "camera axis",
+                 "description": "..."},
+                {"key": "early_extension", "label": "Early extension",
+                 "value": 14.0, "unit": "°", "ideal_range": [-6.0, 8.0],
+                 "lower_is_better": True, "assessment": "watch",
+                 "delta": 6.0, "delta_normalized": 0.43,
+                 "reliable": True, "unreliable_reason": None,
+                 "description": "..."},
+            ],
+        }
+
+    def test_unreliable_metrics_are_absent_from_the_prompt(self):
+        prompt = build_coaching_prompt(self._dtl_metrics(), [], "right")
+        assert "shoulder_turn_at_top" not in prompt
+        assert "early_extension" in prompt
+
+    def test_prompt_states_the_camera_view(self):
+        prompt = build_coaching_prompt(self._dtl_metrics(), [], "right")
+        assert "down_the_line" in prompt
+
+    def test_no_drills_offered_for_an_unreliable_metric(self):
+        prompt = build_coaching_prompt(self._dtl_metrics(), [], "right")
+        assert "turn_cross_arm" not in prompt
+
+    def test_build_report_refuses_an_unreliable_metric(self):
+        """Even if the model names it anyway."""
+        out = build_report(
+            _report([Improvement(metric_key="shoulder_turn_at_top",
+                                 issue="Short turn", why_it_matters="...",
+                                 drill_ids=["turn_cross_arm"])]),
+            self._dtl_metrics(),
+        )
+        assert out["improvements"] == []
+
+    def test_reliable_metrics_still_coach_normally(self):
+        drill = drills_for("early_extension")[0]["id"]
+        out = build_report(
+            _report([Improvement(metric_key="early_extension", issue="Standing up",
+                                 why_it_matters="...", drill_ids=[drill])]),
+            self._dtl_metrics(),
+        )
+        assert len(out["improvements"]) == 1
+        assert out["improvements"][0]["metric_context"]["delta"] == 6.0
 
 
 class TestBuildReport:
