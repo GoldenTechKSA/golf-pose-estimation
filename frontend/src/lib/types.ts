@@ -113,6 +113,32 @@ export interface Comparison {
   skipped: SkippedMetric[];
 }
 
+/** Everything needed to draw a reference skeleton over a user's video. */
+export interface Overlay {
+  /** user frame index -> reference frame index. Monotonic. */
+  frame_map: number[];
+  anchor_frame: number;
+  scale: number;
+  mirrored: boolean;
+  reference_name: string;
+  edges: [number, number][];
+  user: {
+    fps: number;
+    n_frames: number;
+    width: number;
+    height: number;
+    hip_centers: [number, number][];
+  };
+  reference: {
+    n_frames: number;
+    width: number;
+    height: number;
+    hip_centers: [number, number][];
+    /** (n_frames, 17, 3) of [x, y, confidence] in reference pixel space. */
+    keypoints: number[][][];
+  };
+}
+
 export type CameraView = "face_on" | "oblique" | "down_the_line" | "unknown";
 
 export interface CameraInfo {

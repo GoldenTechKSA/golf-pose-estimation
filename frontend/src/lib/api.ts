@@ -1,5 +1,6 @@
 import type {
   Comparison,
+  Overlay,
   ReferenceSummary,
   SwingDetail,
   SwingSummary,
@@ -69,6 +70,10 @@ export function listReferences(): Promise<ReferenceSummary[]> {
 
 export function getComparison(swingId: string, refId: string): Promise<Comparison> {
   return request(`/api/v1/swings/${swingId}/compare/${refId}`);
+}
+
+export function getOverlay(swingId: string, refId: string): Promise<Overlay> {
+  return request(`/api/v1/swings/${swingId}/compare/${refId}/overlay`);
 }
 
 export { ApiError };

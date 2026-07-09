@@ -5,9 +5,15 @@ import { useEffect, useState } from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SegmentedToggle } from "@/components/ui/segmented-toggle";
-import { getComparison, listReferences } from "@/lib/api";
+import { SkeletonOverlay } from "@/components/video/skeleton-overlay";
+import { getComparison, getOverlay, listReferences } from "@/lib/api";
 import { cn, unitIsTight } from "@/lib/utils";
-import type { Comparison, ComparisonMetric, ReferenceSummary } from "@/lib/types";
+import type {
+  Comparison,
+  ComparisonMetric,
+  Overlay,
+  ReferenceSummary,
+} from "@/lib/types";
 
 /**
  * Symbol units ride along with the number ("31.4°"); word units would blow the
@@ -69,10 +75,15 @@ function groupByReason(skipped: { key: string; label: string; reason: string }[]
   return [...groups.entries()];
 }
 
+type Tab = "numbers" | "overlay";
+
 export function ComparePanel({ swingId }: { swingId: string }) {
   const [references, setReferences] = useState<ReferenceSummary[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [comparison, setComparison] = useState<Comparison | null>(null);
+  const [overlay, setOverlay] = useState<Overlay | null>(null);
+  const [overlayFailed, setOverlayFailed] = useState(false);
+  const [tab, setTab] = useState<Tab>("numbers");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -93,9 +104,19 @@ export function ComparePanel({ swingId }: { swingId: string }) {
     if (!selected) return;
     let cancelled = false;
     setComparison(null);
+    setOverlay(null);
+    setOverlayFailed(false);
+
     getComparison(swingId, selected)
       .then((c) => !cancelled && setComparison(c))
       .catch(() => !cancelled && setError("Couldn't compare against that reference."));
+
+    // The overlay is a separate, heavier payload. Failing to build it (a swing
+    // with no phase anchors, say) must not take the numbers down with it.
+    getOverlay(swingId, selected)
+      .then((o) => !cancelled && setOverlay(o))
+      .catch(() => !cancelled && setOverlayFailed(true));
+
     return () => {
       cancelled = true;
     };
@@ -108,28 +129,54 @@ export function ComparePanel({ swingId }: { swingId: string }) {
     <Card>
       <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
         <CardTitle>Compare against a reference</CardTitle>
-        {references.length > 1 && selected && (
-          <SegmentedToggle
-            label="Reference swing"
-            variant="tab"
-            value={selected}
-            onChange={setSelected}
-            options={references.map((r) => ({ value: r.id, label: r.display_name }))}
-          />
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {references.length > 1 && selected && (
+            <SegmentedToggle
+              label="Reference swing"
+              variant="tab"
+              size="sm"
+              value={selected}
+              onChange={setSelected}
+              options={references.map((r) => ({ value: r.id, label: r.display_name }))}
+            />
+          )}
+          {overlay && (
+            <SegmentedToggle
+              label="Comparison view"
+              variant="tab"
+              value={tab}
+              onChange={setTab}
+              options={[
+                { value: "numbers", label: "Numbers" },
+                { value: "overlay", label: "Overlay" },
+              ]}
+            />
+          )}
+        </div>
       </CardHeader>
 
       <CardContent className="flex flex-col gap-4">
-        {!comparison && <p className="text-sm text-muted">Comparing…</p>}
+        {tab === "overlay" && overlay && (
+          <SkeletonOverlay swingId={swingId} overlay={overlay} />
+        )}
 
-        {comparison && !comparison.camera.compatible && (
+        {tab === "numbers" && !comparison && (
+          <p className="text-sm text-muted">Comparing…</p>
+        )}
+        {tab === "numbers" && overlayFailed && (
+          <p className="text-xs text-muted">
+            The skeleton overlay isn&apos;t available for this pair of swings.
+          </p>
+        )}
+
+        {tab === "numbers" && comparison && !comparison.camera.compatible && (
           <p className="flex items-start gap-2 rounded-lg bg-surface-2 p-3 text-sm text-secondary">
             <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-watch" aria-hidden />
             <span>{comparison.camera.reason}</span>
           </p>
         )}
 
-        {comparison && comparison.metrics.length > 0 && (
+        {tab === "numbers" && comparison && comparison.metrics.length > 0 && (
           <div>
             <div className="grid grid-cols-[1fr_5rem_5rem_5rem] gap-3 pb-1 text-xs font-medium text-muted">
               <span>Metric</span>
@@ -143,13 +190,13 @@ export function ComparePanel({ swingId }: { swingId: string }) {
           </div>
         )}
 
-        {comparison && comparison.metrics.length === 0 && comparison.camera.compatible && (
+        {tab === "numbers" && comparison && comparison.metrics.length === 0 && comparison.camera.compatible && (
           <p className="text-sm text-muted">
             Nothing in these two swings can be compared.
           </p>
         )}
 
-        {comparison && (
+        {tab === "numbers" && comparison && (
           <div className="flex flex-col gap-1 text-xs text-muted">
             {comparison.rotation_note && (
               <p className="flex items-start gap-1.5">

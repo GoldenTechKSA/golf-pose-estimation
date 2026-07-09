@@ -6,11 +6,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_settings_dep
+from app.api.deps import get_db, get_settings_dep, get_storage_dep
 from app.config import Settings
+from app.core.keypoints import SKELETON_EDGES, KeypointSeries
 from app.models.database import Swing, SwingAnalysis, SwingStatus
 from app.services.comparison import compute_comparison, rotation_note
+from app.services.overlay import build_overlay
 from app.services.reference_library import ReferenceLibrary, ReferenceNotFound
+from app.services.storage import LocalStorage
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["references"])
@@ -60,6 +63,48 @@ def get_reference_artifact(
         raise HTTPException(404, f"{artifact} not available for this reference")
     media_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
     return FileResponse(path, media_type=media_type, filename=path.name)
+
+
+@router.get("/swings/{swing_id}/compare/{ref_id}/overlay")
+def compare_overlay(
+    swing_id: str,
+    ref_id: str,
+    db: Session = Depends(get_db),
+    storage: LocalStorage = Depends(get_storage_dep),
+    library: ReferenceLibrary = Depends(get_library),
+) -> dict:
+    """Time warp + spatial transform for drawing the reference over this swing."""
+    swing = db.get(Swing, swing_id)
+    if swing is None:
+        raise HTTPException(404, "swing not found")
+    analysis = db.get(SwingAnalysis, swing_id)
+    if analysis is None or not analysis.metrics:
+        raise HTTPException(409, "this swing has no analysis to align against")
+    if not storage.artifact_exists(swing_id, "keypoints"):
+        raise HTTPException(409, "this swing has no keypoints")
+    if not library.exists(ref_id):
+        raise HTTPException(404, "reference not found")
+
+    user_events = analysis.metrics.get("events") or {}
+    ref_events = library.phases(ref_id).get("events") or {}
+    if not _has_anchors(user_events) or not _has_anchors(ref_events):
+        raise HTTPException(409, "one of these swings is missing swing-phase anchors")
+
+    user = KeypointSeries.from_json_payload(storage.load_json(swing_id, "keypoints"))
+    reference = KeypointSeries.from_json_payload(library.load(ref_id, "keypoints"))
+
+    profile = library.profile(ref_id)
+    mirror = (profile.get("handedness") or "right") != (swing.handedness or "right")
+
+    payload = build_overlay(user, user_events, reference, ref_events, mirror)
+    payload["edges"] = [[int(a), int(b)] for edges in SKELETON_EDGES.values()
+                        for a, b in edges]
+    payload["reference_name"] = profile["display_name"]
+    return payload
+
+
+def _has_anchors(events: dict) -> bool:
+    return all(k in events for k in ("takeaway", "top", "impact", "finish"))
 
 
 @router.get("/swings/{swing_id}/compare/{ref_id}")
