@@ -155,6 +155,34 @@ def compute_series(series: KeypointSeries, handedness: str = "right") -> dict[st
 # Summary metrics
 # ---------------------------------------------------------------------------
 
+def _compute_delta(value: float | None, ideal: tuple[float, float] | None
+                   ) -> tuple[float | None, float | None]:
+    """How far outside its ideal range a value sits, two ways.
+
+    `delta` is signed and in the metric's own unit: the distance to the nearest
+    violated bound, 0.0 when inside the range. The sign is purely geometric —
+    negative means below the range, positive means above it. It deliberately
+    does NOT encode "bad", which is what `lower_is_better` is for.
+
+    `delta_normalized` is unsigned, expressed in range-widths. It is what makes
+    misses comparable across metrics: 7 degrees outside shoulder turn (60-wide
+    band) is a 0.12 miss, while 7 degrees outside early extension (14-wide band)
+    is a 0.50 miss. Ranking issues by the raw delta would surface the wrong one.
+    """
+    if value is None or ideal is None:
+        return None, None
+    lo, hi = ideal
+    if lo <= value <= hi:
+        signed = 0.0
+    elif value < lo:
+        signed = value - lo
+    else:
+        signed = value - hi
+    width = hi - lo
+    normalized = None if width <= 0 else round(abs(signed) / width, 2)
+    return round(signed, 1), normalized
+
+
 def _entry(key: str, label: str, value: float | None, unit: str,
            ideal: tuple[float, float] | None, description: str,
            lower_is_better: bool = False) -> dict:
@@ -165,6 +193,8 @@ def _entry(key: str, label: str, value: float | None, unit: str,
             assessment = "good"
         else:
             assessment = "watch"
+    delta, delta_normalized = _compute_delta(
+        None if value is None else float(value), ideal)
     return {
         "key": key,
         "label": label,
@@ -173,6 +203,8 @@ def _entry(key: str, label: str, value: float | None, unit: str,
         "ideal_range": list(ideal) if ideal else None,
         "lower_is_better": lower_is_better,
         "assessment": assessment,
+        "delta": delta,
+        "delta_normalized": delta_normalized,
         "description": description,
     }
 

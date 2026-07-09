@@ -58,6 +58,10 @@ export interface MetricEntry {
   ideal_range: [number, number] | null;
   lower_is_better: boolean;
   assessment: "good" | "watch" | null;
+  /** Signed distance to the nearest violated bound, in the metric's unit. 0 when in range. */
+  delta: number | null;
+  /** |delta| in range-widths, so misses are comparable across metrics. */
+  delta_normalized: number | null;
   description: string;
 }
 
@@ -80,10 +84,34 @@ export interface SwingMetrics {
   warnings?: string[];
 }
 
+export interface Drill {
+  id: string;
+  name: string;
+  fixes: string;
+  how_to: string;
+}
+
+/** The numbers the backend attached — the model wrote none of these. */
+export interface CoachingMetricContext {
+  label: string;
+  value: number | null;
+  unit: string;
+  ideal_range: [number, number] | null;
+  delta: number | null;
+  delta_normalized: number | null;
+  assessment: "good" | "watch" | null;
+  lower_is_better: boolean;
+}
+
 export interface CoachingImprovement {
+  metric_key: string;
   issue: string;
   why_it_matters: string;
-  drill: string;
+  /** Absent on analyses stored before the drill library landed. */
+  metric_context?: CoachingMetricContext;
+  drills?: Drill[];
+  /** Legacy free-text drill, pre-drill-library. */
+  drill?: string;
 }
 
 export interface CoachingStrength {

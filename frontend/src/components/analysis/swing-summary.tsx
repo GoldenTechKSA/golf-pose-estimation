@@ -21,6 +21,7 @@ export function SwingSummary({
   const watch = scored.filter((m) => m.assessment === "watch");
   const tempo = metrics.summary.find((m) => m.key === "tempo_ratio");
   const topFault = coaching?.improvements[0] ?? null;
+  const topDrill = topFault?.drills?.[0] ?? null;
 
   const headline =
     scored.length === 0
@@ -57,10 +58,13 @@ export function SwingSummary({
             )
           )}
 
-          {topFault && (
+          {topDrill && (
             <p className="flex items-start gap-2 text-sm text-secondary">
               <Dumbbell className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden />
-              <span>{topFault.drill}</span>
+              <span>
+                <span className="font-medium text-foreground">{topDrill.name}. </span>
+                {topDrill.fixes}
+              </span>
             </p>
           )}
         </div>

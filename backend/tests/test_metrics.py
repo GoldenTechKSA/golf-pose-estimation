@@ -5,6 +5,7 @@ import pytest
 
 from app.services.metric_calculator import (
     MIN_LINE_RATIO,
+    _compute_delta,
     compute_metrics,
     joint_angle_deg,
     line_angle_deg,
@@ -111,6 +112,54 @@ class TestSwingMetrics:
     def test_includes_2d_limitation_notes(self, analysis):
         metrics, _ = analysis
         assert any("2D" in note for note in metrics["notes"])
+
+
+class TestDelta:
+    def test_in_range_is_zero(self):
+        assert _compute_delta(5.0, (0.0, 10.0)) == (0.0, 0.0)
+
+    def test_below_range_is_negative(self):
+        delta, _ = _compute_delta(-3.0, (0.0, 10.0))
+        assert delta == -3.0
+
+    def test_above_range_is_positive(self):
+        delta, _ = _compute_delta(14.0, (0.0, 10.0))
+        assert delta == 4.0
+
+    def test_none_value_or_range_yields_none(self):
+        assert _compute_delta(None, (0.0, 10.0)) == (None, None)
+        assert _compute_delta(5.0, None) == (None, None)
+
+    def test_normalized_ranks_a_narrow_band_as_worse(self):
+        """The same 7-unit miss matters more on a tight range."""
+        _, wide = _compute_delta(127.0, (60.0, 120.0))    # width 60
+        _, narrow = _compute_delta(15.0, (-6.0, 8.0))     # width 14
+        assert narrow > wide
+
+    def test_normalized_is_unsigned(self):
+        _, below = _compute_delta(-4.0, (0.0, 10.0))
+        _, above = _compute_delta(14.0, (0.0, 10.0))
+        assert below > 0 and above > 0
+
+    def test_sign_is_geometric_not_badness(self):
+        """early_extension is lower_is_better, but a value above its band still
+        produces a positive delta. Badness lives in `lower_is_better`."""
+        delta, _ = _compute_delta(14.0, (-6.0, 8.0))
+        assert delta == 6.0
+
+    def test_summary_entries_carry_delta(self, analysis):
+        metrics, _ = analysis
+        for entry in metrics["summary"]:
+            assert "delta" in entry and "delta_normalized" in entry
+            if entry["value"] is None or entry["ideal_range"] is None:
+                assert entry["delta"] is None
+
+    def test_unbounded_metric_has_no_delta(self, analysis):
+        """x_factor_stretch has no published ideal band; that is honest, not a gap."""
+        metrics, _ = analysis
+        stretch = next(e for e in metrics["summary"] if e["key"] == "x_factor_stretch")
+        assert stretch["ideal_range"] is None
+        assert stretch["delta"] is None
 
 
 class TestLineAngleMasking:

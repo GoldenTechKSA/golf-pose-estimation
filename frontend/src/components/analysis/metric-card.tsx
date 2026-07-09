@@ -10,7 +10,7 @@ import type { MetricEntry } from "@/lib/types";
  * is icon + label (never color alone).
  */
 export function MetricCard({ metric }: { metric: MetricEntry }) {
-  const { label, value, unit, ideal_range, assessment, description } = metric;
+  const { label, value, unit, ideal_range, assessment, delta, description } = metric;
   return (
     // The tile grid is for scanning numbers and status. The explanatory sentence
     // stays reachable on hover rather than competing with the value on every tile.
@@ -44,6 +44,13 @@ export function MetricCard({ metric }: { metric: MetricEntry }) {
           {ideal_range && (
             <span className="tabular text-muted">
               typical {formatRange(ideal_range, unit)}
+            </span>
+          )}
+          {delta != null && delta !== 0 && (
+            <span className="tabular font-medium text-watch">
+              Δ {delta > 0 ? "+" : ""}
+              {delta}
+              {unitIsTight(unit) ? unit : ` ${unit}`}
             </span>
           )}
         </div>
