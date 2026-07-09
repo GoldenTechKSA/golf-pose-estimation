@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 
 import { PhaseTimeline } from "@/components/video/phase-timeline";
 import { apiUrl } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { SegmentedToggle } from "@/components/ui/segmented-toggle";
 import type { PhaseSegment, SwingDetail } from "@/lib/types";
 
 const SPEEDS = [0.25, 0.5, 1] as const;
@@ -49,25 +49,17 @@ export function VideoPlayer({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
-        <div role="tablist" aria-label="Video view" className="flex rounded-lg border border-border p-0.5">
-          {(["annotated", "original"] as const).map((tab) => (
-            <button
-              key={tab}
-              role="tab"
-              aria-selected={view === tab}
-              disabled={tab === "annotated" && !urls.annotated}
-              onClick={() => setView(tab)}
-              className={cn(
-                "rounded-md px-3 py-1 text-sm capitalize transition-colors disabled:opacity-40",
-                view === tab
-                  ? "bg-surface-2 font-medium"
-                  : "text-secondary hover:text-foreground",
-              )}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
+        <SegmentedToggle
+          label="Video view"
+          variant="tab"
+          value={view}
+          onChange={setView}
+          itemClassName="capitalize"
+          options={[
+            { value: "annotated", label: "annotated", disabled: !urls.annotated },
+            { value: "original", label: "original" },
+          ]}
+        />
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -85,24 +77,15 @@ export function VideoPlayer({
           >
             <StepForward className="h-4 w-4" />
           </button>
-          <div className="ml-1 flex rounded-lg border border-border p-0.5">
-            {SPEEDS.map((value) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={speed === value}
-                onClick={() => setPlaybackSpeed(value)}
-                className={cn(
-                  "rounded-md px-2 py-0.5 text-xs transition-colors",
-                  speed === value
-                    ? "bg-surface-2 font-medium"
-                    : "text-secondary hover:text-foreground",
-                )}
-              >
-                {value}×
-              </button>
-            ))}
-          </div>
+          <SegmentedToggle
+            label="Playback speed"
+            variant="pressed"
+            size="sm"
+            className="ml-1"
+            value={speed}
+            onChange={setPlaybackSpeed}
+            options={SPEEDS.map((value) => ({ value, label: `${value}×` }))}
+          />
         </div>
       </div>
 

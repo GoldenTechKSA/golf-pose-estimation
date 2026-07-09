@@ -13,11 +13,13 @@ import { apiUrl, deleteSwing, listSwings } from "@/lib/api";
 import { cn, formatDate, formatDuration } from "@/lib/utils";
 import type { SwingStatus, SwingSummary } from "@/lib/types";
 
+const HISTORY_POLL_MS = 3000;
+
 const STATUS_STYLES: Record<SwingStatus, string> = {
   completed: "text-good-text",
   processing: "text-accent",
   queued: "text-secondary",
-  failed: "text-[#d03b3b]",
+  failed: "text-danger",
 };
 
 export default function HistoryPage() {
@@ -37,6 +39,18 @@ export default function HistoryPage() {
   useEffect(() => {
     void load();
   }, []);
+
+  // Rows for queued/processing swings would otherwise sit at whatever percentage
+  // they happened to be at when the page loaded. Poll only while something is
+  // actually in flight, and stop as soon as everything is terminal.
+  const inFlight = swings?.some(
+    (s) => s.status === "queued" || s.status === "processing",
+  );
+  useEffect(() => {
+    if (!inFlight) return;
+    const timer = setInterval(() => void load(), HISTORY_POLL_MS);
+    return () => clearInterval(timer);
+  }, [inFlight]);
 
   const remove = async (id: string) => {
     if (!window.confirm("Delete this swing and its videos permanently?")) return;
@@ -69,7 +83,7 @@ export default function HistoryPage() {
       </div>
 
       {error && (
-        <p role="alert" className="mt-6 text-sm text-[#d03b3b]">
+        <p role="alert" className="mt-6 text-sm text-danger">
           {error}
         </p>
       )}

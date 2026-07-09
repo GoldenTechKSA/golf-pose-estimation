@@ -1,4 +1,10 @@
-import type { SwingDetail, SwingSummary } from "@/lib/types";
+import type {
+  Comparison,
+  Overlay,
+  ReferenceSummary,
+  SwingDetail,
+  SwingSummary,
+} from "@/lib/types";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://localhost:8000";
@@ -56,6 +62,18 @@ export function listSwings(): Promise<SwingSummary[]> {
 
 export function deleteSwing(id: string): Promise<void> {
   return request(`/api/v1/swings/${id}`, { method: "DELETE" });
+}
+
+export function listReferences(): Promise<ReferenceSummary[]> {
+  return request("/api/v1/references");
+}
+
+export function getComparison(swingId: string, refId: string): Promise<Comparison> {
+  return request(`/api/v1/swings/${swingId}/compare/${refId}`);
+}
+
+export function getOverlay(swingId: string, refId: string): Promise<Overlay> {
+  return request(`/api/v1/swings/${swingId}/compare/${refId}/overlay`);
 }
 
 export { ApiError };

@@ -58,7 +58,94 @@ export interface MetricEntry {
   ideal_range: [number, number] | null;
   lower_is_better: boolean;
   assessment: "good" | "watch" | null;
+  /** Signed distance to the nearest violated bound, in the metric's unit. 0 when in range. */
+  delta: number | null;
+  /** |delta| in range-widths, so misses are comparable across metrics. */
+  delta_normalized: number | null;
+  /** False when this camera angle cannot measure what the metric claims to. */
+  reliable: boolean;
+  unreliable_reason: string | null;
   description: string;
+}
+
+export interface ReferenceSummary {
+  id: string;
+  display_name: string;
+  handedness: string;
+  camera_view: CameraView;
+  source: string;
+  license: string;
+  has_video: boolean;
+}
+
+export interface ComparisonMetric {
+  key: string;
+  label: string;
+  unit: string;
+  user_value: number;
+  reference_value: number;
+  difference: number;
+  ideal_range: [number, number] | null;
+  user_assessment: "good" | "watch" | null;
+  lower_is_better: boolean;
+  /** |difference| in ideal-band widths. Null when the metric has no band. */
+  gap_normalized: number | null;
+  /** True for metrics that never touch the projection, e.g. tempo. */
+  view_independent: boolean;
+}
+
+export interface SkippedMetric {
+  key: string;
+  label: string;
+  reason: string;
+}
+
+export interface Comparison {
+  reference: ReferenceSummary & { frontality: number | null };
+  camera: {
+    user_view: CameraView;
+    reference_view: CameraView;
+    compatible: boolean;
+    reason: string | null;
+  };
+  rotation_note: string | null;
+  metrics: ComparisonMetric[];
+  skipped: SkippedMetric[];
+}
+
+/** Everything needed to draw a reference skeleton over a user's video. */
+export interface Overlay {
+  /** user frame index -> reference frame index. Monotonic. */
+  frame_map: number[];
+  anchor_frame: number;
+  scale: number;
+  mirrored: boolean;
+  reference_name: string;
+  edges: [number, number][];
+  user: {
+    fps: number;
+    n_frames: number;
+    width: number;
+    height: number;
+    hip_centers: [number, number][];
+  };
+  reference: {
+    n_frames: number;
+    width: number;
+    height: number;
+    hip_centers: [number, number][];
+    /** (n_frames, 17, 3) of [x, y, confidence] in reference pixel space. */
+    keypoints: number[][][];
+  };
+}
+
+export type CameraView = "face_on" | "oblique" | "down_the_line" | "unknown";
+
+export interface CameraInfo {
+  view: CameraView;
+  /** Shoulder width over torso length at address. Low means end-on to the camera. */
+  frontality: number | null;
+  rotation_measurable: boolean;
 }
 
 export interface KinematicSequence {
@@ -70,6 +157,8 @@ export interface KinematicSequence {
 }
 
 export interface SwingMetrics {
+  /** Absent on analyses stored before camera-view detection landed. */
+  camera?: CameraInfo;
   summary: MetricEntry[];
   series: Record<string, (number | null)[]>;
   kinematic_sequence: KinematicSequence;
@@ -80,10 +169,34 @@ export interface SwingMetrics {
   warnings?: string[];
 }
 
+export interface Drill {
+  id: string;
+  name: string;
+  fixes: string;
+  how_to: string;
+}
+
+/** The numbers the backend attached — the model wrote none of these. */
+export interface CoachingMetricContext {
+  label: string;
+  value: number | null;
+  unit: string;
+  ideal_range: [number, number] | null;
+  delta: number | null;
+  delta_normalized: number | null;
+  assessment: "good" | "watch" | null;
+  lower_is_better: boolean;
+}
+
 export interface CoachingImprovement {
+  metric_key: string;
   issue: string;
   why_it_matters: string;
-  drill: string;
+  /** Absent on analyses stored before the drill library landed. */
+  metric_context?: CoachingMetricContext;
+  drills?: Drill[];
+  /** Legacy free-text drill, pre-drill-library. */
+  drill?: string;
 }
 
 export interface CoachingStrength {

@@ -54,3 +54,11 @@ logs/
 !legacy/outputs/*.MOV
 !legacy/sample-videos/*.mp4
 !legacy/sample-videos/*.MOV
+.gstack/
+
+# Reference swings (pro comparison). Videos and anything derived from them stay
+# out of the repo: the licensing question is deferred, and committing an asset
+# is the step that makes it un-deferrable.
+data/references/
+backend/data/references/
+*.reference.mp4

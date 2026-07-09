@@ -18,8 +18,8 @@ export function ProcessingView({ progress }: { progress: ProgressMessage | null 
   if (failed) {
     return (
       <Card className="mx-auto max-w-lg">
-        <CardContent className="flex flex-col items-center gap-4 p-8 text-center">
-          <XCircle className="h-10 w-10 text-[#d03b3b]" aria-hidden />
+        <CardContent padding="standalone" className="flex flex-col items-center gap-4 text-center">
+          <XCircle className="h-10 w-10 text-danger" aria-hidden />
           <div>
             <h2 className="text-lg font-semibold">Analysis failed</h2>
             <p className="mt-1 text-sm text-secondary">
@@ -37,7 +37,7 @@ export function ProcessingView({ progress }: { progress: ProgressMessage | null 
 
   return (
     <Card className="mx-auto max-w-lg">
-      <CardContent className="flex flex-col gap-6 p-8">
+      <CardContent padding="standalone" className="flex flex-col gap-6">
         <div className="text-center">
           <h2 className="text-lg font-semibold">Analyzing your swing</h2>
           <p className="mt-1 text-sm text-secondary">

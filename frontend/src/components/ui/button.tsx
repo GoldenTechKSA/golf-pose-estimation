@@ -12,7 +12,7 @@ const variants: Record<Variant, string> = {
     "border border-border bg-surface text-foreground hover:bg-surface-2",
   ghost: "text-secondary hover:bg-surface-2 hover:text-foreground",
   danger:
-    "border border-border text-[#d03b3b] hover:bg-[#d03b3b]/10",
+    "border border-border text-danger hover:bg-danger/10",
 };
 
 const sizes: Record<Size, string> = {
