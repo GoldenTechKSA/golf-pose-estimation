@@ -20,6 +20,9 @@ RUN mkdir -p app && touch app/__init__.py \
 # App layer: copy the real code and reinstall just this package, leaving the
 # cached dependency layer untouched (seconds instead of minutes to rebuild).
 COPY app ./app
+# Maintainer tools (build_reference). They run nowhere else — pose inference and
+# ffmpeg only exist in this image.
+COPY scripts ./scripts
 RUN pip install --no-cache-dir --no-deps --force-reinstall .
 
 # Non-root runtime user; /data holds uploads, outputs, and model weights.

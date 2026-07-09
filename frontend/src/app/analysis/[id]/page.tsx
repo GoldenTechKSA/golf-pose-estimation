@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { useEffect } from "react";
 
 import { CoachingPanel } from "@/components/analysis/coaching-panel";
+import { ComparePanel } from "@/components/analysis/compare-panel";
 import { KeyMetrics } from "@/components/analysis/key-metrics";
 import { ProcessingView } from "@/components/analysis/processing-view";
 import { SwingDetail } from "@/components/analysis/swing-detail";
@@ -116,6 +117,8 @@ export default function AnalysisPage() {
       </div>
 
       {metrics && <SwingDetail metrics={metrics} phases={swing.phases} />}
+
+      {metrics && <ComparePanel swingId={swing.id} />}
 
       <section aria-labelledby="coaching-heading">
         <h2 id="coaching-heading" className="mb-3 text-lg font-semibold">

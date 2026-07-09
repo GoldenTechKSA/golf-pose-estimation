@@ -68,6 +68,51 @@ export interface MetricEntry {
   description: string;
 }
 
+export interface ReferenceSummary {
+  id: string;
+  display_name: string;
+  handedness: string;
+  camera_view: CameraView;
+  source: string;
+  license: string;
+  has_video: boolean;
+}
+
+export interface ComparisonMetric {
+  key: string;
+  label: string;
+  unit: string;
+  user_value: number;
+  reference_value: number;
+  difference: number;
+  ideal_range: [number, number] | null;
+  user_assessment: "good" | "watch" | null;
+  lower_is_better: boolean;
+  /** |difference| in ideal-band widths. Null when the metric has no band. */
+  gap_normalized: number | null;
+  /** True for metrics that never touch the projection, e.g. tempo. */
+  view_independent: boolean;
+}
+
+export interface SkippedMetric {
+  key: string;
+  label: string;
+  reason: string;
+}
+
+export interface Comparison {
+  reference: ReferenceSummary & { frontality: number | null };
+  camera: {
+    user_view: CameraView;
+    reference_view: CameraView;
+    compatible: boolean;
+    reason: string | null;
+  };
+  rotation_note: string | null;
+  metrics: ComparisonMetric[];
+  skipped: SkippedMetric[];
+}
+
 export type CameraView = "face_on" | "oblique" | "down_the_line" | "unknown";
 
 export interface CameraInfo {

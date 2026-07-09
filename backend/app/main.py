@@ -10,7 +10,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import health, swings
+from app.api.routes import health, references, swings
 from app.api.websockets import progress
 from app.config import Settings, get_settings
 from app.models.database import create_session_factory
@@ -42,6 +42,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(health.router, prefix=settings.api_v1_prefix)
     app.include_router(swings.router, prefix=settings.api_v1_prefix)
+    app.include_router(references.router, prefix=settings.api_v1_prefix)
     app.include_router(progress.router)
     return app
 
