@@ -4,13 +4,12 @@ import { useParams } from "next/navigation";
 import { useEffect } from "react";
 
 import { CoachingPanel } from "@/components/analysis/coaching-panel";
-import { KinematicSequencePanel } from "@/components/analysis/kinematic-sequence";
 import { MetricCard } from "@/components/analysis/metric-card";
 import { ProcessingView } from "@/components/analysis/processing-view";
-import { AngleChart } from "@/components/charts/angle-chart";
+import { SwingDetail } from "@/components/analysis/swing-detail";
+import { SwingSummary } from "@/components/analysis/swing-summary";
 import { VideoPlayer } from "@/components/video/video-player";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSwing } from "@/hooks/use-swing";
 import { useSwingProgress } from "@/hooks/use-swing-progress";
@@ -85,7 +84,7 @@ export default function AnalysisPage() {
   const metrics = swing.metrics;
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-10 sm:px-6">
+    <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 sm:px-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Swing analysis</h1>
@@ -96,10 +95,11 @@ export default function AnalysisPage() {
         <div className="flex flex-wrap gap-2">
           <Badge>{swing.handedness}-handed</Badge>
           <Badge>{formatDuration(swing.duration)}</Badge>
-          {swing.fps ? <Badge>{Math.round(swing.fps)} fps</Badge> : null}
-          {swing.pose_model && <Badge>{swing.pose_model.replace(".pt", "")}</Badge>}
         </div>
       </header>
+
+      {/* Primary read, before anything that needs interpreting. */}
+      {metrics && <SwingSummary metrics={metrics} coaching={swing.coaching} />}
 
       {metrics?.warnings?.map((warning) => (
         <p key={warning} className="text-sm text-watch">
@@ -120,6 +120,8 @@ export default function AnalysisPage() {
             <div className="grid grid-cols-2 gap-3">
               {metrics.summary
                 .filter((entry) => entry.value != null)
+                // Tempo is the hero's headline number; a tile would say it twice.
+                .filter((entry) => entry.key !== "tempo_ratio")
                 .map((entry) => (
                   <MetricCard key={entry.key} metric={entry} />
                 ))}
@@ -128,30 +130,7 @@ export default function AnalysisPage() {
         )}
       </div>
 
-      {metrics && (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Angles through the swing</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {swing.phases && <AngleChart metrics={metrics} phases={swing.phases} />}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Kinematic sequence</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <KinematicSequencePanel
-                sequence={metrics.kinematic_sequence}
-                fps={metrics.fps}
-              />
-            </CardContent>
-          </Card>
-        </>
-      )}
+      {metrics && <SwingDetail metrics={metrics} phases={swing.phases} />}
 
       <section aria-labelledby="coaching-heading">
         <h2 id="coaching-heading" className="mb-3 text-lg font-semibold">
@@ -160,10 +139,20 @@ export default function AnalysisPage() {
         <CoachingPanel coaching={swing.coaching} />
       </section>
 
+      {/* Tertiary: methodology and caveats, for the reader who goes looking. */}
       {metrics && (
-        <p className="text-xs text-muted">
-          {metrics.notes.join(" ")}
-        </p>
+        <details className="text-xs text-muted">
+          <summary className="cursor-pointer text-secondary hover:text-foreground">
+            Analysis details
+          </summary>
+          <p className="mt-2 leading-relaxed">{metrics.notes.join(" ")}</p>
+          {swing.pose_model && (
+            <p className="mt-1">
+              Pose model: {swing.pose_model.replace(".pt", "")}
+              {swing.fps ? ` · ${Math.round(swing.fps)} fps` : ""}
+            </p>
+          )}
+        </details>
       )}
     </div>
   );

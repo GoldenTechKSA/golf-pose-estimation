@@ -20,6 +20,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.config import Settings, get_settings
 from app.core.smoothing import smooth_series
+from app.core.timing import format_timings, record
 from app.models.database import ProcessingStage, Swing, SwingAnalysis, create_session_factory
 from app.services import video_processor as vp
 from app.services.coaching import generate_coaching
@@ -31,12 +32,18 @@ from app.services.storage import LocalStorage, get_storage
 
 logger = logging.getLogger(__name__)
 
-# Stage boundaries on the unified progress bar.
-_PREPARE_SPAN = (0.0, 8.0)
-_EXTRACT_SPAN = (8.0, 55.0)
-_ANALYZE_SPAN = (55.0, 62.0)
-_RENDER_SPAN = (62.0, 93.0)
-_COACH_SPAN = (93.0, 99.0)
+# Stage boundaries on the unified progress bar, weighted by measured wall-clock
+# share rather than guessed. On the sample swing (yolo11n @ 640, CPU, 151
+# frames, 14.4s total): prepare 7.5%, extract 77.6%, analyze <0.1%, render
+# 14.9%. The old weights gave extract 47% and render 31%, so the bar sprinted to
+# 55% and then sat still through the longest stage — which is most of what
+# "analysis feels slow" actually was. Coaching keeps a wider slice than it will
+# usually need because it is a network call with variable latency.
+_PREPARE_SPAN = (0.0, 7.0)
+_EXTRACT_SPAN = (7.0, 78.0)
+_ANALYZE_SPAN = (78.0, 79.0)
+_RENDER_SPAN = (79.0, 92.0)
+_COACH_SPAN = (92.0, 99.0)
 
 
 def _span_progress(span: tuple[float, float], fraction: float) -> float:
@@ -67,14 +74,16 @@ class SwingProcessor:
         if original is None:
             raise FileNotFoundError(f"no uploaded video found for swing {swing_id}")
         handedness = self._swing_field(swing_id, "handedness") or self.settings.default_handedness
+        timings: dict[str, float] = {}
 
         # 1. Normalize the upload and capture a poster frame.
         reporter.update(ProcessingStage.PREPARING, _span_progress(_PREPARE_SPAN, 0.1),
                         "normalizing video")
         source = self.storage.artifact_path(swing_id, "source")
-        vp.normalize_video(original, source, self.settings.max_processing_dim)
-        info = vp.probe(source)
-        vp.save_thumbnail(source, self.storage.artifact_path(swing_id, "thumbnail"))
+        with record(timings, "prepare_s"):
+            vp.normalize_video(original, source, self.settings.max_processing_dim)
+            info = vp.probe(source)
+            vp.save_thumbnail(source, self.storage.artifact_path(swing_id, "thumbnail"))
         self._update_swing(swing_id, fps=info.fps, width=info.width, height=info.height,
                            n_frames=info.n_frames, duration=info.duration)
         reporter.update(ProcessingStage.PREPARING, _span_progress(_PREPARE_SPAN, 1.0),
@@ -82,41 +91,59 @@ class SwingProcessor:
 
         # 2. Pose estimation over every frame.
         estimator = self._estimator_factory()
-        raw = vp.extract_keypoints(
-            source, estimator,
-            on_progress=lambda f, m: reporter.update(
-                ProcessingStage.EXTRACTING_KEYPOINTS, _span_progress(_EXTRACT_SPAN, f), m),
-        )
+        with record(timings, "extract_s"):
+            raw = vp.extract_keypoints(
+                source, estimator,
+                on_progress=lambda f, m: reporter.update(
+                    ProcessingStage.EXTRACTING_KEYPOINTS, _span_progress(_EXTRACT_SPAN, f), m),
+            )
         self.storage.save_json(swing_id, "keypoints", raw.to_json_payload())
         self._update_swing(swing_id, pose_model=estimator.model_name)
 
         # 3. Clean the tracks, segment the swing, and compute biomechanics.
-        smoothed = smooth_series(raw, conf_threshold=self.settings.pose_conf_threshold)
-        reporter.update(ProcessingStage.ANALYZING, _span_progress(_ANALYZE_SPAN, 0.2),
-                        "detecting swing phases")
-        phases = detect_phases(smoothed)
-        reporter.update(ProcessingStage.ANALYZING, _span_progress(_ANALYZE_SPAN, 0.6),
-                        "computing biomechanical metrics")
-        metrics = compute_metrics(smoothed, phases, handedness)
+        with record(timings, "analyze_s"):
+            smoothed = smooth_series(raw, conf_threshold=self.settings.pose_conf_threshold)
+            reporter.update(ProcessingStage.ANALYZING, _span_progress(_ANALYZE_SPAN, 0.2),
+                            "detecting swing phases")
+            phases = detect_phases(smoothed)
+            reporter.update(ProcessingStage.ANALYZING, _span_progress(_ANALYZE_SPAN, 0.6),
+                            "computing biomechanical metrics")
+            metrics = compute_metrics(smoothed, phases, handedness)
         if phases.warnings:
             metrics["warnings"] = phases.warnings
         self._save_analysis(swing_id, phases=phases.segments, metrics=metrics)
 
         # 4. Render the annotated video, phase-colored.
-        vp.render_annotated(
-            source, self.storage.artifact_path(swing_id, "annotated"), smoothed,
-            frame_labels=phases.frame_labels,
-            label_colors=PHASE_COLORS_BGR,
-            on_progress=lambda f, m: reporter.update(
-                ProcessingStage.RENDERING, _span_progress(_RENDER_SPAN, f), m),
-        )
+        with record(timings, "render_s"):
+            vp.render_annotated(
+                source, self.storage.artifact_path(swing_id, "annotated"), smoothed,
+                frame_labels=phases.frame_labels,
+                label_colors=PHASE_COLORS_BGR,
+                on_progress=lambda f, m: reporter.update(
+                    ProcessingStage.RENDERING, _span_progress(_RENDER_SPAN, f), m),
+            )
 
         # 5. AI coaching feedback (best-effort — never fails the job).
         reporter.update(ProcessingStage.COACHING, _span_progress(_COACH_SPAN, 0.2),
                         "generating coaching feedback")
-        coaching = generate_coaching(metrics, phases.segments, handedness, self.settings)
+        with record(timings, "coach_s"):
+            coaching = generate_coaching(metrics, phases.segments, handedness, self.settings)
         if coaching is not None:
             self._save_analysis(swing_id, coaching=coaching)
+
+        logger.info(
+            "pipeline timings %s",
+            format_timings(
+                swing=swing_id,
+                total_s=round(sum(timings.values()), 3),
+                **timings,
+                n_frames=info.n_frames,
+                fps=round(info.fps, 2),
+                dims=f"{info.width}x{info.height}",
+                pose_model=estimator.model_name,
+                pose_imgsz=self.settings.pose_imgsz,
+            ),
+        )
 
     def _swing_field(self, swing_id: str, field: str):
         with self.session_factory() as session:

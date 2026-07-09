@@ -37,11 +37,39 @@ def line_angle_deg(p_a: np.ndarray, p_b: np.ndarray) -> np.ndarray:
 
     Works framewise on (n, 2) arrays. y is flipped so positive angle means
     point b is *above* point a. Returns NaN where the points coincide.
+
+    The `1e-9` degeneracy guard only catches exactly-coincident points. It says
+    nothing about *conditioning*: at 5px of separation the angle is already
+    noise. Prefer `line_angle_masked` for body lines, which knows the body's
+    scale and can tell a short line from a well-formed one.
     """
     d = np.asarray(p_b, dtype=np.float64) - np.asarray(p_a, dtype=np.float64)
     degenerate = np.linalg.norm(d, axis=-1) < 1e-9
     angle = np.degrees(np.arctan2(-d[..., 1], d[..., 0]))
     return np.where(degenerate, np.nan, angle)
+
+
+# A projected line shorter than this fraction of torso length is pointing too
+# near the camera axis for its angle to mean anything: at that separation a
+# pixel of pose noise swings the angle tens of degrees. Measured on the sample
+# swing, the shoulder line collapses to 0.075 of torso length at impact while
+# sitting near 0.5 through the rest of the swing.
+MIN_LINE_RATIO = 0.15
+
+
+def line_angle_masked(p_a: np.ndarray, p_b: np.ndarray,
+                      scale: np.ndarray) -> np.ndarray:
+    """`line_angle_deg`, but NaN wherever the line is too foreshortened to trust.
+
+    `scale` is a per-frame body length (torso). Without this guard a line seen
+    end-on produces a noise-driven angle, and its derivative produces a spike
+    large enough to dominate the kinematic sequence.
+    """
+    angle = line_angle_deg(p_a, p_b)
+    length = np.linalg.norm(np.asarray(p_b) - np.asarray(p_a), axis=-1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratio = np.where(scale > 1e-6, length / scale, 0.0)
+    return np.where(ratio < MIN_LINE_RATIO, np.nan, angle)
 
 
 def joint_angle_deg(p_a: np.ndarray, p_b: np.ndarray, p_c: np.ndarray) -> np.ndarray:
@@ -96,10 +124,17 @@ def compute_series(series: KeypointSeries, handedness: str = "right") -> dict[st
     def kp(name: str) -> np.ndarray:
         return series.xy(KP[name])
 
-    shoulders = line_angle_deg(kp(f"{trail}_SHOULDER"), kp(f"{lead}_SHOULDER"))
-    hips = line_angle_deg(kp(f"{trail}_HIP"), kp(f"{lead}_HIP"))
     mid_shoulder = series.midpoint(KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER)
     mid_hip = series.midpoint(KP.LEFT_HIP, KP.RIGHT_HIP)
+    torso = np.linalg.norm(mid_shoulder - mid_hip, axis=-1)
+
+    # Shoulder and hip lines are only meaningful while they still project to a
+    # usable length. Down the line they never do; face-on they collapse near the
+    # top of the backswing. Masking is honest — a NaN reads as "not measurable
+    # from this camera", where a number reads as a fact.
+    shoulders = line_angle_masked(
+        kp(f"{trail}_SHOULDER"), kp(f"{lead}_SHOULDER"), torso)
+    hips = line_angle_masked(kp(f"{trail}_HIP"), kp(f"{lead}_HIP"), torso)
 
     return {
         "shoulder_angle": shoulders,
@@ -153,19 +188,31 @@ def _kinematic_sequence(series: KeypointSeries, signals: dict[str, np.ndarray],
     downswing. An efficient swing sequences proximal-to-distal:
     hips -> torso -> arms."""
     lead = "LEFT" if handedness == "right" else "RIGHT"
-    arm_line = line_angle_deg(
-        series.xy(KP[f"{lead}_SHOULDER"]), series.xy(KP[f"{lead}_WRIST"]))
+    mid_shoulder = series.midpoint(KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER)
+    mid_hip = series.midpoint(KP.LEFT_HIP, KP.RIGHT_HIP)
+    torso = np.linalg.norm(mid_shoulder - mid_hip, axis=-1)
+    arm_line = line_angle_masked(
+        series.xy(KP[f"{lead}_SHOULDER"]), series.xy(KP[f"{lead}_WRIST"]), torso)
 
     top, impact = events["top"], events["impact"]
     if impact - top < 3:
         return {"available": False, "reason": "downswing too short to sequence"}
 
     window = slice(top, impact + 1)
+    inputs = (("hips", signals["hip_angle"]),
+              ("torso", signals["shoulder_angle"]),
+              ("arms", arm_line))
+
+    # A masked frame anywhere in the downswing means at least one segment's
+    # rotation was unmeasurable there. Zero-filling it would manufacture a
+    # velocity spike and hand the ordering to an artifact, so decline instead.
+    if any(np.isnan(signal[window]).any() for _, signal in inputs):
+        return {"available": False,
+                "reason": "segment rotation not measurable from this camera angle"}
+
     peaks: dict[str, int] = {}
-    for name, signal in (("hips", signals["hip_angle"]),
-                         ("torso", signals["shoulder_angle"]),
-                         ("arms", arm_line)):
-        speed = np.abs(velocity(np.nan_to_num(signal, nan=0.0), series.fps))[window]
+    for name, signal in inputs:
+        speed = np.abs(velocity(signal, series.fps))[window]
         smooth = moving_average(speed, 3)
         peaks[name] = top + int(np.argmax(smooth))
 

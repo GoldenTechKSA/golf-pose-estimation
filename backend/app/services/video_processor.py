@@ -21,6 +21,7 @@ import cv2
 import numpy as np
 
 from app.core.keypoints import SKELETON_EDGES, KeypointSeries, NUM_KEYPOINTS
+from app.core.timing import format_timings, record
 from app.services.pose.base import PoseEstimator
 
 logger = logging.getLogger(__name__)
@@ -238,28 +239,36 @@ def render_annotated(source: Path, dst: Path, series: KeypointSeries,
                 segments.append((start, i - 1, color))
                 start = i
 
+    timings: dict[str, float] = {}
     with tempfile.TemporaryDirectory() as tmp:
         raw_path = Path(tmp) / "raw.mp4"
         writer = cv2.VideoWriter(
             str(raw_path), cv2.VideoWriter_fourcc(*"mp4v"), info.fps,
             (info.width, info.height),
         )
+        # The draw pass and the browser re-encode are timed apart: this frame is
+        # written twice (cv2 mp4v, then H.264 via ffmpeg) and which half dominates
+        # decides whether collapsing them into one ffmpeg pipe is worth doing.
         try:
-            for idx, frame in iter_frames(source):
-                if idx < series.n_frames:
-                    draw_skeleton(frame, series.data[idx])
-                if frame_labels and idx < len(frame_labels):
-                    label = frame_labels[idx]
-                    accent = (label_colors or {}).get(label, (200, 200, 200))
-                    _draw_banner(frame, label.upper(), accent)
-                    _draw_timeline(frame, idx, n, segments)
-                writer.write(frame)
-                if on_progress and idx % 10 == 0:
-                    on_progress((idx + 1) / max(info.n_frames, idx + 1),
-                                f"rendering annotated video — frame {idx + 1}/{info.n_frames}")
+            with record(timings, "draw_s"):
+                for idx, frame in iter_frames(source):
+                    if idx < series.n_frames:
+                        draw_skeleton(frame, series.data[idx])
+                    if frame_labels and idx < len(frame_labels):
+                        label = frame_labels[idx]
+                        accent = (label_colors or {}).get(label, (200, 200, 200))
+                        _draw_banner(frame, label.upper(), accent)
+                        _draw_timeline(frame, idx, n, segments)
+                    writer.write(frame)
+                    if on_progress and idx % 10 == 0:
+                        on_progress((idx + 1) / max(info.n_frames, idx + 1),
+                                    f"rendering annotated video — frame {idx + 1}/{info.n_frames}")
         finally:
             writer.release()
-        reencode_for_browser(raw_path, dst)
+        with record(timings, "encode_s"):
+            reencode_for_browser(raw_path, dst)
+
+    logger.info("render timings %s", format_timings(n_frames=n, **timings))
 
 
 def save_thumbnail(source: Path, dst: Path, at_fraction: float = 0.1) -> None:

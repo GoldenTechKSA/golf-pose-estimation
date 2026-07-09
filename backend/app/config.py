@@ -48,10 +48,16 @@ class Settings(BaseSettings):
     pose_model_fallbacks: list[str] = ["yolo11m-pose.pt", "yolov8m-pose.pt"]
     pose_device: str = ""  # "" lets ultralytics pick (cuda/mps/cpu)
     pose_conf_threshold: float = 0.25
-    # Inference resolution (long side) the model runs at. Pose keypoints are
-    # scaled back to the source resolution regardless, so this trades
-    # localization precision for speed — 640 is the model default, 512 is
-    # noticeably faster on CPU with a small accuracy cost.
+    # Inference resolution (long side) the model runs at. Keypoints are scaled
+    # back to the source resolution regardless, so this trades localization
+    # precision for speed.
+    #
+    # Do not lower this casually. Measured on data/samples/bassil-swing.mp4
+    # (yolo11n, CPU): 512 cuts total analysis time 26%, but shifts
+    # shoulder_turn_at_top by +8.5 deg and lead_arm_at_impact by -12.6 deg, and
+    # moves early_extension across its ideal bound — flipping that metric's
+    # verdict from "good" to "watch". A metric that changes its answer with the
+    # inference resolution is not one we can put a delta next to.
     pose_imgsz: int = 640
     # Long side of frames fed to the model; larger inputs are downscaled for
     # inference speed (annotation is still rendered at the processing size).
@@ -65,7 +71,7 @@ class Settings(BaseSettings):
     # --- AI coaching ---
     anthropic_api_key: str = ""
     coaching_model: str = "claude-sonnet-5"
-    coaching_max_tokens: int = 2000
+    coaching_max_tokens: int = 3000
 
 
 @lru_cache

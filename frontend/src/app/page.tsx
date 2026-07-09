@@ -103,7 +103,7 @@ export default function LandingPage() {
             transition={{ duration: 0.4, delay: i * 0.06 }}
           >
             <Card className="h-full">
-              <CardContent className="flex h-full flex-col gap-3 p-5">
+              <CardContent padding="standalone" className="flex h-full flex-col gap-3">
                 <feature.icon className="h-5 w-5 text-accent" aria-hidden />
                 <h3 className="font-semibold">{feature.title}</h3>
                 <p className="text-sm text-secondary">{feature.body}</p>

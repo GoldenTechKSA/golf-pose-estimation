@@ -54,3 +54,4 @@ logs/
 !legacy/outputs/*.MOV
 !legacy/sample-videos/*.mp4
 !legacy/sample-videos/*.MOV
+.gstack/

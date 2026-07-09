@@ -13,7 +13,7 @@ import {
 } from "recharts";
 
 import { PHASE_LABELS, phaseColor } from "@/lib/phases";
-import { cn } from "@/lib/utils";
+import { SegmentedToggle } from "@/components/ui/segmented-toggle";
 import type { PhaseSegment, SwingMetrics } from "@/lib/types";
 
 /**
@@ -134,24 +134,16 @@ export function AngleChart({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div role="tablist" aria-label="Chart mode" className="flex rounded-lg border border-border p-0.5">
-          {Object.entries(CHART_MODES).map(([key, def]) => (
-            <button
-              key={key}
-              role="tab"
-              aria-selected={mode === key}
-              onClick={() => setMode(key as keyof typeof CHART_MODES)}
-              className={cn(
-                "rounded-md px-3 py-1 text-sm transition-colors",
-                mode === key
-                  ? "bg-surface-2 font-medium"
-                  : "text-secondary hover:text-foreground",
-              )}
-            >
-              {def.title}
-            </button>
-          ))}
-        </div>
+        <SegmentedToggle
+          label="Chart mode"
+          variant="tab"
+          value={mode}
+          onChange={setMode}
+          options={Object.entries(CHART_MODES).map(([key, def]) => ({
+            value: key as keyof typeof CHART_MODES,
+            label: def.title,
+          }))}
+        />
         <div className="flex flex-wrap gap-x-3 gap-y-1" aria-label="Series legend">
           {series.map((s) => (
             <span key={s.key} className="flex items-center gap-1.5 text-xs text-secondary">
@@ -210,7 +202,10 @@ export function AngleChart({
                 strokeWidth={2}
                 dot={false}
                 activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--surface)" }}
-                connectNulls
+                // A null here means the backend judged the angle unmeasurable on
+                // that frame. Bridging the gap would draw a line through data we
+                // said we don't have.
+                connectNulls={false}
                 isAnimationActive={false}
               />
             ))}
@@ -218,18 +213,6 @@ export function AngleChart({
         </ResponsiveContainer>
       </div>
 
-      <div className="flex flex-wrap gap-x-3 gap-y-1" aria-label="Phase legend">
-        {phases.map((phase) => (
-          <span key={phase.name} className="flex items-center gap-1.5 text-xs text-muted">
-            <span
-              className="h-2 w-2 rounded-sm"
-              style={{ background: phaseColor(phase.name), opacity: 0.6 }}
-              aria-hidden
-            />
-            {PHASE_LABELS[phase.name]}
-          </span>
-        ))}
-      </div>
     </div>
   );
 }

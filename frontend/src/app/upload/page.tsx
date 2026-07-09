@@ -8,7 +8,7 @@ import { Dropzone } from "@/components/upload/dropzone";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { uploadSwing } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { SegmentedToggle } from "@/components/ui/segmented-toggle";
 
 export default function UploadPage() {
   const router = useRouter();
@@ -53,40 +53,30 @@ export default function UploadPage() {
         />
 
         <Card>
-          <CardContent className="flex items-center justify-between gap-4 p-5">
+          <CardContent padding="standalone" className="flex items-center justify-between gap-4">
             <div>
               <p className="font-medium">Which way do you swing?</p>
               <p className="text-sm text-secondary">
                 Used to pick your lead arm and leg for the metrics.
               </p>
             </div>
-            <div
-              role="radiogroup"
-              aria-label="Handedness"
-              className="flex rounded-lg border border-border p-0.5"
-            >
-              {(["right", "left"] as const).map((side) => (
-                <button
-                  key={side}
-                  role="radio"
-                  aria-checked={handedness === side}
-                  onClick={() => setHandedness(side)}
-                  className={cn(
-                    "rounded-md px-4 py-1.5 text-sm capitalize transition-colors",
-                    handedness === side
-                      ? "bg-surface-2 font-medium"
-                      : "text-secondary hover:text-foreground",
-                  )}
-                >
-                  {side}-handed
-                </button>
-              ))}
-            </div>
+            <SegmentedToggle
+              label="Handedness"
+              variant="radio"
+              size="lg"
+              value={handedness}
+              onChange={setHandedness}
+              itemClassName="capitalize"
+              options={[
+                { value: "right", label: "right-handed" },
+                { value: "left", label: "left-handed" },
+              ]}
+            />
           </CardContent>
         </Card>
 
         {error && (
-          <p role="alert" className="text-sm text-[#d03b3b]">
+          <p role="alert" className="text-sm text-danger">
             {error}
           </p>
         )}

@@ -80,6 +80,19 @@ def build_coaching_prompt(metrics: dict, phases: list[dict], handedness: str) ->
     )
 
 
+_client_singleton = None
+
+
+def _cached_client(api_key: str):
+    """Reuse one client per process so repeated jobs share the connection pool."""
+    global _client_singleton
+    if _client_singleton is None:
+        import anthropic
+
+        _client_singleton = anthropic.Anthropic(api_key=api_key)
+    return _client_singleton
+
+
 def generate_coaching(metrics: dict, phases: list[dict], handedness: str,
                       settings: Settings) -> dict | None:
     """Call Claude for coaching feedback. Returns None when unavailable."""
@@ -88,12 +101,15 @@ def generate_coaching(metrics: dict, phases: list[dict], handedness: str,
         return None
 
     try:
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        client = _cached_client(settings.anthropic_api_key)
         response = client.messages.parse(
             model=settings.coaching_model,
             max_tokens=settings.coaching_max_tokens,
+            # Thinking tokens are drawn from max_tokens. Left on, they can starve
+            # the JSON and truncate it into an unparseable response. This call is
+            # extraction from numbers already computed, so there is nothing to reason
+            # about.
+            thinking={"type": "disabled"},
             system=SYSTEM_PROMPT,
             messages=[{
                 "role": "user",
