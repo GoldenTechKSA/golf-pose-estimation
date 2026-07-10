@@ -5,6 +5,7 @@ import pytest
 
 from app.services.metric_calculator import (
     FRONTALITY_FACE_ON,
+    MIN_LIMB_RATIO,
     MIN_LINE_RATIO,
     ROTATION_METRIC_KEYS,
     _apply_camera_reliability,
@@ -12,6 +13,7 @@ from app.services.metric_calculator import (
     classify_view,
     compute_metrics,
     joint_angle_deg,
+    joint_angle_masked,
     line_angle_deg,
     line_angle_masked,
     vertical_tilt_deg,
@@ -173,6 +175,49 @@ class TestCameraView:
         the ratio converges on the face-on value. Address is where they differ."""
         metrics, _ = analysis
         assert metrics["camera"]["frontality"] is not None
+
+
+class TestJointAngleMasking:
+    """A limb pointing at the lens projects short, and the interior angle at its
+    joint is foreshortened: a straight arm seen end-on measures bent."""
+
+    def test_a_well_projected_limb_keeps_its_angle(self):
+        a = np.array([[0.0, 100.0]])
+        b = np.array([[0.0, 0.0]])
+        c = np.array([[100.0, 0.0]])
+        scale = np.array([100.0])
+        assert joint_angle_masked(a, b, c, scale)[0] == pytest.approx(90.0)
+
+    def test_a_foreshortened_limb_is_masked(self):
+        a = np.array([[0.0, 10.0]])  # 10 / 100 = 0.1, far under the threshold
+        b = np.array([[0.0, 0.0]])
+        c = np.array([[100.0, 0.0]])
+        scale = np.array([100.0])
+        assert np.isnan(joint_angle_masked(a, b, c, scale)[0])
+
+    def test_the_shorter_limb_decides(self):
+        """One long segment cannot rescue an angle read off a collapsed one."""
+        long_ok = MIN_LIMB_RATIO * 100 + 20
+        too_short = MIN_LIMB_RATIO * 100 - 5
+        b = np.array([[0.0, 0.0], [0.0, 0.0]])
+        a = np.array([[0.0, long_ok], [0.0, too_short]])
+        c = np.array([[long_ok, 0.0], [long_ok, 0.0]])
+        out = joint_angle_masked(a, b, c, np.array([100.0, 100.0]))
+        assert not np.isnan(out[0])
+        assert np.isnan(out[1])
+
+    def test_a_straight_arm_seen_end_on_would_have_read_bent(self):
+        """Why the guard exists, shown on the unmasked helper."""
+        shoulder = np.array([[0.0, 0.0]])
+        elbow = np.array([[10.0, 2.0]])   # arm nearly along the camera axis
+        wrist = np.array([[18.0, 12.0]])
+        bent = joint_angle_deg(shoulder, elbow, wrist)[0]
+        assert bent < 140  # the arm is straight in 3D; the projection disagrees
+
+    def test_lead_arm_survives_on_the_face_on_synthetic_swing(self, analysis):
+        metrics, _ = analysis
+        lead_arm = next(e for e in metrics["summary"] if e["key"] == "lead_arm_at_top")
+        assert lead_arm["value"] is not None
 
 
 class TestDelta:
