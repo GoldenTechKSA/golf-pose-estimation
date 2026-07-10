@@ -75,6 +75,12 @@ def build(args: argparse.Namespace) -> int:
         "has_video": True,
         "n_frames": info.n_frames,
         "fps": info.fps,
+        # Inference resolution shifts these metrics by more than the golfer
+        # differences a comparison is trying to show (640 -> 512 moved
+        # shoulder_turn_at_top 8.5 deg and flipped early_extension's verdict).
+        # Record what produced these numbers so a mismatch can be surfaced.
+        "pose_model": settings.pose_model,
+        "pose_imgsz": settings.pose_imgsz,
     }
     (ref_dir / "profile.json").write_text(json.dumps(profile, indent=2))
 
@@ -82,7 +88,7 @@ def build(args: argparse.Namespace) -> int:
     existing = [r for r in library.list() if r["id"] != args.id]
     summary = {k: profile[k] for k in
                ("id", "display_name", "handedness", "camera_view", "source",
-                "license", "has_video")}
+                "license", "has_video", "pose_model", "pose_imgsz")}
     index_path.write_text(json.dumps({"references": existing + [summary]}, indent=2))
 
     logger.info("built reference %s: view=%s frontality=%s",

@@ -127,6 +127,33 @@ def classify_view(frontality: float | None) -> str:
     return "oblique"
 
 
+# A limb shorter than this fraction of torso length is pointing near the camera
+# axis, and the interior angle at its joint is foreshortened: a straight arm
+# seen end-on projects as a bent one.
+#
+# Calibration, upper-arm / torso at the top of the backswing:
+#     reference swing, down the line   0.26  -> elbow reads 67 deg (arm is straight)
+#     user swing, down the line        0.43
+#     synthetic swing, face-on         0.48
+# 0.35 masks the first and spares the other two. Note how close face-on sits:
+# at the top of *any* swing the lead arm crosses the chest and foreshortens, so
+# this metric is weak in monocular 2D even head-on. The guard catches the cases
+# where it is meaningless, not every case where it is imperfect.
+MIN_LIMB_RATIO = 0.35
+
+
+def joint_angle_masked(p_a: np.ndarray, p_b: np.ndarray, p_c: np.ndarray,
+                       scale: np.ndarray) -> np.ndarray:
+    """`joint_angle_deg`, but NaN where either limb is too foreshortened to trust."""
+    angle = joint_angle_deg(p_a, p_b, p_c)
+    first = np.linalg.norm(np.asarray(p_a) - np.asarray(p_b), axis=-1)
+    second = np.linalg.norm(np.asarray(p_c) - np.asarray(p_b), axis=-1)
+    shorter = np.minimum(first, second)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratio = np.where(scale > 1e-6, shorter / scale, 0.0)
+    return np.where(ratio < MIN_LIMB_RATIO, np.nan, angle)
+
+
 def joint_angle_deg(p_a: np.ndarray, p_b: np.ndarray, p_c: np.ndarray) -> np.ndarray:
     """Interior angle at vertex b for points a-b-c, in degrees [0, 180].
 
@@ -196,12 +223,14 @@ def compute_series(series: KeypointSeries, handedness: str = "right") -> dict[st
         "hip_angle": hips,
         "x_factor": shoulders - hips,
         "spine_angle": vertical_tilt_deg(mid_hip, mid_shoulder),
-        "lead_arm": joint_angle_deg(
-            kp(f"{lead}_SHOULDER"), kp(f"{lead}_ELBOW"), kp(f"{lead}_WRIST")),
-        "lead_knee_flex": joint_angle_deg(
-            kp(f"{lead}_HIP"), kp(f"{lead}_KNEE"), kp(f"{lead}_ANKLE")),
-        "trail_knee_flex": joint_angle_deg(
-            kp(f"{trail}_HIP"), kp(f"{trail}_KNEE"), kp(f"{trail}_ANKLE")),
+        # Interior joint angles collapse the same way lines do when the limb
+        # points at the lens. The lead arm does exactly this at the top.
+        "lead_arm": joint_angle_masked(
+            kp(f"{lead}_SHOULDER"), kp(f"{lead}_ELBOW"), kp(f"{lead}_WRIST"), torso),
+        "lead_knee_flex": joint_angle_masked(
+            kp(f"{lead}_HIP"), kp(f"{lead}_KNEE"), kp(f"{lead}_ANKLE"), torso),
+        "trail_knee_flex": joint_angle_masked(
+            kp(f"{trail}_HIP"), kp(f"{trail}_KNEE"), kp(f"{trail}_ANKLE"), torso),
         "wrist_height": series.wrist_height() / max(series.height, 1),
     }
 

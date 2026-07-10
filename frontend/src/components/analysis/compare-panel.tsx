@@ -176,6 +176,14 @@ export function ComparePanel({ swingId }: { swingId: string }) {
           </p>
         )}
 
+        {/* A settings mismatch taints every row, so it sits above the table. */}
+        {tab === "numbers" && comparison?.pipeline_note && (
+          <p className="flex items-start gap-2 rounded-lg bg-surface-2 p-3 text-sm text-secondary">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-watch" aria-hidden />
+            <span>{comparison.pipeline_note}</span>
+          </p>
+        )}
+
         {tab === "numbers" && comparison && comparison.metrics.length > 0 && (
           <div>
             <div className="grid grid-cols-[1fr_5rem_5rem_5rem] gap-3 pb-1 text-xs font-medium text-muted">

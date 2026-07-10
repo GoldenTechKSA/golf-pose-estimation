@@ -109,6 +109,8 @@ export interface Comparison {
     reason: string | null;
   };
   rotation_note: string | null;
+  /** Set when the reference was measured with different pose settings. */
+  pipeline_note: string | null;
   metrics: ComparisonMetric[];
   skipped: SkippedMetric[];
 }
