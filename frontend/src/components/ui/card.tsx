@@ -2,11 +2,16 @@ import type { HTMLAttributes } from "react";
 
 import { cn } from "@/lib/utils";
 
-export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+export function Card({
+  className,
+  interactive = false,
+  ...props
+}: HTMLAttributes<HTMLDivElement> & { interactive?: boolean }) {
   return (
     <div
       className={cn(
-        "rounded-xl border border-border bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04)]",
+        "rounded-xl border border-border bg-surface shadow-elev",
+        interactive && "card-interactive",
         className,
       )}
       {...props}

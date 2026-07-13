@@ -72,10 +72,10 @@ export function Dropzone({
         onDrop={onDrop}
         aria-label="Choose or drop a swing video"
         className={cn(
-          "flex w-full cursor-pointer flex-col items-center gap-3 rounded-xl border-2 border-dashed p-10 text-center transition-colors",
+          "flex w-full cursor-pointer flex-col items-center gap-3 rounded-xl border-2 border-dashed p-10 text-center transition-all duration-300",
           dragging
-            ? "border-accent bg-accent/5"
-            : "border-border bg-surface hover:border-muted",
+            ? "scale-[1.01] border-accent bg-accent/8 shadow-elev-lg"
+            : "border-border bg-surface/60 backdrop-blur hover:border-accent/50 hover:bg-surface-2/60",
           disabled && "pointer-events-none opacity-60",
         )}
       >
