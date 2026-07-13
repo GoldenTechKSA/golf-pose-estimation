@@ -112,7 +112,6 @@ def compare_swing(
     swing_id: str,
     ref_id: str,
     db: Session = Depends(get_db),
-    settings: Settings = Depends(get_settings_dep),
     library: ReferenceLibrary = Depends(get_library),
 ) -> dict:
     swing = db.get(Swing, swing_id)
@@ -134,17 +133,18 @@ def compare_swing(
     return {
         "reference": profile,
         "rotation_note": rotation_note(result["camera"]["user_view"]),
-        "pipeline_note": _pipeline_note(profile, swing, settings),
+        "pipeline_note": _pipeline_note(profile, swing),
         **result,
     }
 
 
-def _pipeline_note(profile: dict, swing: Swing, settings: Settings) -> str | None:
+def _pipeline_note(profile: dict, swing: Swing) -> str | None:
     """Two swings run through different pose settings differ by the settings.
 
     Inference resolution moves these metrics by more than the golfer differences
     a comparison exists to show, so a mismatch is a caveat on every row, not a
-    footnote.
+    footnote. Both sides are compared at the values recorded when each was
+    processed — never the live settings, which may have changed since.
     """
     ref_imgsz = profile.get("pose_imgsz")
     ref_model = profile.get("pose_model")
@@ -153,8 +153,8 @@ def _pipeline_note(profile: dict, swing: Swing, settings: Settings) -> str | Non
                 "recorded, so we cannot tell whether it matches your swing.")
 
     mismatches = []
-    if ref_imgsz != settings.pose_imgsz:
-        mismatches.append(f"inference resolution ({ref_imgsz} vs {settings.pose_imgsz})")
+    if swing.pose_imgsz is not None and ref_imgsz != swing.pose_imgsz:
+        mismatches.append(f"inference resolution ({ref_imgsz} vs {swing.pose_imgsz})")
     if ref_model and swing.pose_model and ref_model != swing.pose_model:
         mismatches.append(f"pose model ({ref_model} vs {swing.pose_model})")
     if not mismatches:

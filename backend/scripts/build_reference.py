@@ -47,7 +47,8 @@ def build(args: argparse.Namespace) -> int:
     vp.save_thumbnail(source, ref_dir / "thumbnail.jpg")
 
     logger.info("extracting keypoints (%d frames)", info.n_frames)
-    raw = vp.extract_keypoints(source, create_pose_estimator(settings))
+    estimator = create_pose_estimator(settings)
+    raw = vp.extract_keypoints(source, estimator)
 
     # Persist the SMOOTHED series: it is the one phases and metrics were computed
     # from, so an overlay drawn from it will agree with the numbers beside it.
@@ -78,8 +79,12 @@ def build(args: argparse.Namespace) -> int:
         # Inference resolution shifts these metrics by more than the golfer
         # differences a comparison is trying to show (640 -> 512 moved
         # shoulder_turn_at_top 8.5 deg and flipped early_extension's verdict).
-        # Record what produced these numbers so a mismatch can be surfaced.
-        "pose_model": settings.pose_model,
+        # Record what produced these numbers so a mismatch can be surfaced. Use
+        # the model that actually loaded, not the configured one: when the
+        # primary weights are unavailable the estimator falls back, and a
+        # reference mislabeled with the configured name would then flag a false
+        # model mismatch against every swing (which records the same fallback).
+        "pose_model": estimator.model_name,
         "pose_imgsz": settings.pose_imgsz,
     }
     (ref_dir / "profile.json").write_text(json.dumps(profile, indent=2))

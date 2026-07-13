@@ -98,7 +98,8 @@ class SwingProcessor:
                     ProcessingStage.EXTRACTING_KEYPOINTS, _span_progress(_EXTRACT_SPAN, f), m),
             )
         self.storage.save_json(swing_id, "keypoints", raw.to_json_payload())
-        self._update_swing(swing_id, pose_model=estimator.model_name)
+        self._update_swing(swing_id, pose_model=estimator.model_name,
+                           pose_imgsz=self.settings.pose_imgsz)
 
         # 3. Clean the tracks, segment the swing, and compute biomechanics.
         with record(timings, "analyze_s"):

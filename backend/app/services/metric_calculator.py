@@ -145,13 +145,24 @@ MIN_LIMB_RATIO = 0.35
 def joint_angle_masked(p_a: np.ndarray, p_b: np.ndarray, p_c: np.ndarray,
                        scale: np.ndarray) -> np.ndarray:
     """`joint_angle_deg`, but NaN where either limb is too foreshortened to trust."""
-    angle = joint_angle_deg(p_a, p_b, p_c)
-    first = np.linalg.norm(np.asarray(p_a) - np.asarray(p_b), axis=-1)
-    second = np.linalg.norm(np.asarray(p_c) - np.asarray(p_b), axis=-1)
-    shorter = np.minimum(first, second)
+    return _joint_angle_masked(p_a, p_b, p_c, scale)[0]
+
+
+def _joint_angle_masked(p_a: np.ndarray, p_b: np.ndarray, p_c: np.ndarray,
+                        scale: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Masked angle, plus a boolean mask of frames dropped *for foreshortening*.
+
+    A frame is flagged only when a real angle existed but the shorter limb
+    projected under `MIN_LIMB_RATIO` of `scale` — i.e. the limb points near the
+    camera axis. Frames that were NaN for lack of keypoints are not flagged, so
+    a caller can tell "pointing at the lens" apart from "not detected".
+    """
+    angle, n1, n2 = _joint_angle_and_limbs(p_a, p_b, p_c)
+    shorter = np.minimum(n1, n2)
     with np.errstate(divide="ignore", invalid="ignore"):
         ratio = np.where(scale > 1e-6, shorter / scale, 0.0)
-    return np.where(ratio < MIN_LIMB_RATIO, np.nan, angle)
+    foreshortened = np.isfinite(angle) & (ratio < MIN_LIMB_RATIO)
+    return np.where(ratio < MIN_LIMB_RATIO, np.nan, angle), foreshortened
 
 
 def joint_angle_deg(p_a: np.ndarray, p_b: np.ndarray, p_c: np.ndarray) -> np.ndarray:
@@ -160,6 +171,16 @@ def joint_angle_deg(p_a: np.ndarray, p_b: np.ndarray, p_c: np.ndarray) -> np.nda
     Framewise on (n, 2) arrays; NaN where either limb has zero length.
     180 = fully straight (e.g. extended elbow).
     """
+    return _joint_angle_and_limbs(p_a, p_b, p_c)[0]
+
+
+def _joint_angle_and_limbs(p_a: np.ndarray, p_b: np.ndarray, p_c: np.ndarray
+                           ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Interior angle at b, plus the two limb lengths |a-b| and |c-b|.
+
+    The limb lengths are a byproduct of the angle math, so returning them lets
+    the foreshortening guard reuse them instead of taking the norms a second time.
+    """
     v1 = np.asarray(p_a, dtype=np.float64) - np.asarray(p_b, dtype=np.float64)
     v2 = np.asarray(p_c, dtype=np.float64) - np.asarray(p_b, dtype=np.float64)
     n1 = np.linalg.norm(v1, axis=-1)
@@ -167,7 +188,8 @@ def joint_angle_deg(p_a: np.ndarray, p_b: np.ndarray, p_c: np.ndarray) -> np.nda
     degenerate = (n1 < 1e-9) | (n2 < 1e-9)
     safe = np.where(degenerate, 1.0, n1 * n2)
     cos = np.clip((v1 * v2).sum(axis=-1) / safe, -1.0, 1.0)
-    return np.where(degenerate, np.nan, np.degrees(np.arccos(cos)))
+    angle = np.where(degenerate, np.nan, np.degrees(np.arccos(cos)))
+    return angle, n1, n2
 
 
 def vertical_tilt_deg(p_bottom: np.ndarray, p_top: np.ndarray) -> np.ndarray:
@@ -218,15 +240,20 @@ def compute_series(series: KeypointSeries, handedness: str = "right") -> dict[st
         kp(f"{trail}_SHOULDER"), kp(f"{lead}_SHOULDER"), torso)
     hips = line_angle_masked(kp(f"{trail}_HIP"), kp(f"{lead}_HIP"), torso)
 
+    # Interior joint angles collapse the same way lines do when the limb points
+    # at the lens. The lead arm does exactly this at the top, so keep the mask's
+    # reason alongside the values: a frame dropped for foreshortening can then be
+    # explained rather than left as an unexplained blank.
+    lead_arm, lead_arm_foreshortened = _joint_angle_masked(
+        kp(f"{lead}_SHOULDER"), kp(f"{lead}_ELBOW"), kp(f"{lead}_WRIST"), torso)
+
     return {
         "shoulder_angle": shoulders,
         "hip_angle": hips,
         "x_factor": shoulders - hips,
         "spine_angle": vertical_tilt_deg(mid_hip, mid_shoulder),
-        # Interior joint angles collapse the same way lines do when the limb
-        # points at the lens. The lead arm does exactly this at the top.
-        "lead_arm": joint_angle_masked(
-            kp(f"{lead}_SHOULDER"), kp(f"{lead}_ELBOW"), kp(f"{lead}_WRIST"), torso),
+        "lead_arm": lead_arm,
+        "lead_arm_foreshortened": lead_arm_foreshortened,
         "lead_knee_flex": joint_angle_masked(
             kp(f"{lead}_HIP"), kp(f"{lead}_KNEE"), kp(f"{lead}_ANKLE"), torso),
         "trail_knee_flex": joint_angle_masked(
@@ -295,6 +322,25 @@ def _entry(key: str, label: str, value: float | None, unit: str,
         "unreliable_reason": None,
         "description": description,
     }
+
+
+def _lead_arm_entry(signals: dict[str, np.ndarray], key: str, label: str,
+                    frame: int, ideal: tuple[float, float], description: str) -> dict:
+    """A lead-arm entry that explains a foreshortening blank instead of hiding it.
+
+    When the lead arm points near the camera axis at the sampled frame its elbow
+    angle is masked (a straight arm seen end-on projects as bent). That happens
+    even on a face-on swing the camera otherwise reads fine, so surface the mask
+    as a reason — the same way rotation metrics do — rather than leaving a bare
+    dash the viewer cannot account for.
+    """
+    entry = _entry(key, label, _safe(signals["lead_arm"], frame), "°", ideal, description)
+    if entry["value"] is None and bool(signals["lead_arm_foreshortened"][frame]):
+        entry["reliable"] = False
+        entry["unreliable_reason"] = (
+            "The lead arm points close to the camera at this point in the swing, "
+            "so its elbow angle is foreshortened and cannot be measured reliably.")
+    return entry
 
 
 def _apply_camera_reliability(summary: list[dict], view: str) -> list[dict]:
@@ -454,12 +500,12 @@ def compute_metrics(series: KeypointSeries, phases: SwingPhases,
                None,
                "Extra separation gained early in the downswing as the hips "
                "lead. More stretch generally means more stored power."),
-        _entry("lead_arm_at_top", "Lead arm extension at top",
-               _safe(signals["lead_arm"], top), "°", (150.0, 180.0),
+        _lead_arm_entry(signals, "lead_arm_at_top", "Lead arm extension at top",
+               top, (150.0, 180.0),
                "Angle at the lead elbow at the top; straighter creates a "
                "wider, more repeatable arc."),
-        _entry("lead_arm_at_impact", "Lead arm extension at impact",
-               _safe(signals["lead_arm"], impact), "°", (155.0, 180.0),
+        _lead_arm_entry(signals, "lead_arm_at_impact", "Lead arm extension at impact",
+               impact, (155.0, 180.0),
                "Lead arm should be extended through the strike."),
         _entry("spine_angle_at_address", "Spine tilt at address", spine_address, "°",
                (15.0, 45.0),
@@ -492,8 +538,10 @@ def compute_metrics(series: KeypointSeries, phases: SwingPhases,
             "rotation_measurable": view == "face_on",
         },
         "summary": summary,
+        # lead_arm_foreshortened is an internal reason flag, not a plottable
+        # signal — it feeds the lead-arm entries' reliability, not the charts.
         "series": {name: _round_series(values) for name, values in signals.items()
-                   if name != "wrist_height"} | {
+                   if name not in ("wrist_height", "lead_arm_foreshortened")} | {
                    "wrist_height": _round_series(signals["wrist_height"], 3)},
         "kinematic_sequence": _kinematic_sequence(series, signals, ev, handedness, view),
         "events": {k: int(v) for k, v in ev.items()},
