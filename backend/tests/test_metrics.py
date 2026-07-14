@@ -10,6 +10,8 @@ from app.services.metric_calculator import (
     ROTATION_METRIC_KEYS,
     _apply_camera_reliability,
     _compute_delta,
+    _joint_angle_masked,
+    _lead_arm_entry,
     classify_view,
     compute_metrics,
     joint_angle_deg,
@@ -218,6 +220,70 @@ class TestJointAngleMasking:
         metrics, _ = analysis
         lead_arm = next(e for e in metrics["summary"] if e["key"] == "lead_arm_at_top")
         assert lead_arm["value"] is not None
+        assert lead_arm["reliable"] is True
+
+
+class TestForeshorteningFlag:
+    """The mask must say *why* it dropped a frame: a limb pointing at the lens is
+    a different thing from a limb that was never detected."""
+
+    def test_a_well_projected_limb_is_not_flagged(self):
+        a = np.array([[0.0, 100.0]])
+        b = np.array([[0.0, 0.0]])
+        c = np.array([[100.0, 0.0]])
+        masked, foreshortened = _joint_angle_masked(a, b, c, np.array([100.0]))
+        assert masked[0] == pytest.approx(90.0)
+        assert not foreshortened[0]
+
+    def test_a_foreshortened_limb_is_flagged(self):
+        a = np.array([[0.0, 10.0]])  # 10 / 100 = 0.1, well under the threshold
+        b = np.array([[0.0, 0.0]])
+        c = np.array([[100.0, 0.0]])
+        masked, foreshortened = _joint_angle_masked(a, b, c, np.array([100.0]))
+        assert np.isnan(masked[0])
+        assert foreshortened[0]
+
+    def test_missing_keypoints_are_not_called_foreshortened(self):
+        # a == b == c is degenerate (no angle at all). That is "not detected",
+        # not "pointing at the camera", so it must not be flagged.
+        p = np.array([[1.0, 1.0]])
+        masked, foreshortened = _joint_angle_masked(p, p, p, np.array([100.0]))
+        assert np.isnan(masked[0])
+        assert not foreshortened[0]
+
+
+class TestLeadArmEntry:
+    """A foreshortened lead arm is masked, but the blank is explained rather than
+    left bare — the failure the mask introduced on face-on swings."""
+
+    @staticmethod
+    def _signals(value: float, foreshortened: bool) -> dict:
+        return {"lead_arm": np.array([value]),
+                "lead_arm_foreshortened": np.array([foreshortened])}
+
+    def test_a_measurable_value_is_reliable(self):
+        entry = _lead_arm_entry(self._signals(165.0, False), "lead_arm_at_top",
+                                "Lead arm", 0, (150.0, 180.0), "desc")
+        assert entry["value"] == 165.0
+        assert entry["reliable"] is True
+        assert entry["unreliable_reason"] is None
+
+    def test_a_foreshortened_blank_is_explained(self):
+        entry = _lead_arm_entry(self._signals(np.nan, True), "lead_arm_at_top",
+                                "Lead arm", 0, (150.0, 180.0), "desc")
+        assert entry["value"] is None
+        assert entry["reliable"] is False
+        assert "foreshortened" in entry["unreliable_reason"]
+
+    def test_a_missing_value_is_not_blamed_on_foreshortening(self):
+        # NaN with no foreshortening flag: the keypoints simply were not there.
+        # We do not claim the arm pointed at the lens, so the entry stays
+        # reliable-but-empty rather than inventing a reason.
+        entry = _lead_arm_entry(self._signals(np.nan, False), "lead_arm_at_top",
+                                "Lead arm", 0, (150.0, 180.0), "desc")
+        assert entry["value"] is None
+        assert entry["reliable"] is True
+        assert entry["unreliable_reason"] is None
 
 
 class TestDelta:

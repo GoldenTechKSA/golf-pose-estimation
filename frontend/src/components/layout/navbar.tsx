@@ -15,11 +15,13 @@ const links = [
 export function Navbar() {
   const pathname = usePathname();
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur">
+    <header className="glass sticky top-0 z-40 border-b border-border/70">
       <nav className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
-        <Link href="/" className="flex items-center gap-2 font-semibold">
-          <Target className="h-5 w-5 text-accent" aria-hidden />
-          SwingLens
+        <Link href="/" className="group flex items-center gap-2 font-semibold">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/12 ring-1 ring-accent/20 transition-colors group-hover:bg-accent/20">
+            <Target className="h-4 w-4 text-accent" aria-hidden />
+          </span>
+          <span className="text-gradient">SwingLens</span>
         </Link>
         <div className="flex items-center gap-1 sm:gap-2">
           {links.map((link) => (

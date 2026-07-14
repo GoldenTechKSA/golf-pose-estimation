@@ -16,7 +16,7 @@ export function MetricCard({ metric }: { metric: MetricEntry }) {
   return (
     // The tile grid is for scanning numbers and status. The explanatory sentence
     // stays reachable on hover rather than competing with the value on every tile.
-    <Card title={unmeasurable ? metric.unreliable_reason ?? description : description}>
+    <Card interactive title={unmeasurable ? metric.unreliable_reason ?? description : description}>
       <CardContent padding="compact" className="flex h-full flex-col gap-1.5">
         <p className="text-xs font-medium text-secondary">{label}</p>
         <p

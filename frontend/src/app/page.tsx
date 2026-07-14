@@ -58,11 +58,14 @@ export default function LandingPage() {
             {PHASE_ORDER.map((phase) => (
               <span
                 key={phase}
-                className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1 text-xs text-secondary"
+                className="glass flex items-center gap-1.5 rounded-full border border-border/70 px-2.5 py-1 text-xs text-secondary"
               >
                 <span
                   className="h-2 w-2 rounded-full"
-                  style={{ background: phaseColor(phase) }}
+                  style={{
+                    background: phaseColor(phase),
+                    boxShadow: `0 0 8px ${phaseColor(phase)}`,
+                  }}
                   aria-hidden
                 />
                 {PHASE_LABELS[phase]}
@@ -70,7 +73,8 @@ export default function LandingPage() {
             ))}
           </div>
           <h1 className="max-w-3xl text-4xl font-bold tracking-tight sm:text-6xl">
-            See your golf swing the way a coach does.
+            See your golf swing{" "}
+            <span className="text-gradient">the way a coach does.</span>
           </h1>
           <p className="max-w-2xl text-lg text-secondary">
             Upload one video. SwingLens tracks your body frame by frame, detects
@@ -102,9 +106,11 @@ export default function LandingPage() {
             viewport={{ once: true, margin: "-40px" }}
             transition={{ duration: 0.4, delay: i * 0.06 }}
           >
-            <Card className="h-full">
+            <Card interactive className="h-full">
               <CardContent padding="standalone" className="flex h-full flex-col gap-3">
-                <feature.icon className="h-5 w-5 text-accent" aria-hidden />
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-accent/20 to-accent-2/20 ring-1 ring-accent/15">
+                  <feature.icon className="h-5 w-5 text-accent" aria-hidden />
+                </span>
                 <h3 className="font-semibold">{feature.title}</h3>
                 <p className="text-sm text-secondary">{feature.body}</p>
               </CardContent>
@@ -118,7 +124,7 @@ export default function LandingPage() {
         <div className="mx-auto mt-8 grid max-w-3xl gap-6 sm:grid-cols-3">
           {steps.map((step, i) => (
             <div key={step.title} className="flex flex-col items-center gap-2 text-center">
-              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-2">
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-accent/15 to-accent-2/15 ring-1 ring-accent/15">
                 <step.icon className="h-5 w-5 text-accent" aria-hidden />
               </div>
               <h3 className="font-medium">

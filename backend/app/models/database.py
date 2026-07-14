@@ -66,6 +66,10 @@ class Swing(Base):
     duration: Mapped[float | None] = mapped_column(Float, default=None)
 
     pose_model: Mapped[str | None] = mapped_column(String(64), default=None)
+    # Inference resolution this swing was actually processed at. Recorded so a
+    # later change to the global pose_imgsz setting cannot retroactively distort
+    # a comparison against a reference built at the swing's original resolution.
+    pose_imgsz: Mapped[int | None] = mapped_column(Integer, default=None)
 
     analysis: Mapped["SwingAnalysis | None"] = relationship(
         back_populates="swing", uselist=False, cascade="all, delete-orphan"
